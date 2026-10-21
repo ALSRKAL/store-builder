@@ -85,10 +85,28 @@ npm run dev
 ## النشر
 
 ### Cloudflare Pages
+اسم المشروع المنشور: `store-build` (https://store-build.pages.dev).
+
 ```bash
+# 1) بناء من هذا المجلد حتى تُقرأ قيم .env وتُولَّد firebase-config.js
 npm run build
-npm run pages:deploy
+
+# 2) اعرف فرع الإنتاج مرة واحدة (يظهر في العمود Production branch)
+npx wrangler pages project list
+
+# 3) انشر إلى نفس المشروع وإلى فرع الإنتاج
+npx wrangler pages deploy dist --project-name store-build --branch <production-branch>
 ```
+
+أو باستخدام السكربت مع تمرير الفرع:
+```bash
+npm run pages:deploy -- --branch <production-branch>
+```
+
+> - لا تنشر بدون `--project-name`: اسم مشروع مختلف ينشئ مشروعاً جديداً بدل تحديث الموقع الحالي.
+> - إن ظهر رابط نشر بصيغة `<hash>.store-build.pages.dev` بدل الدومين الرئيسي، فالفرع ليس فرع الإنتاج؛ أعد النشر بالفرع الصحيح.
+> - كل نشر جديد يحتفظ بالنسخ السابقة في Deployments، ويمكن الرجوع لأي نسخة من لوحة Cloudflare إذا ظهرت مشكلة.
+> - لا تحتاج إلى إعادة نشر الـWorker لهذه التحديثات (لم تتغيّر ملفات `workers/`).
 
 ### Cloudflare Workers (API)
 ```bash

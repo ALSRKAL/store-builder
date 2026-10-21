@@ -11,7 +11,7 @@
     "verify": "npm run typecheck && npm run lint && npm run build",
     "preview": "vite preview",
     "pages:dev": "wrangler pages dev dist --compatibility-date=2024-01-01",
-    "pages:deploy": "npm run build && wrangler pages deploy dist",
+    "pages:deploy": "npm run build && wrangler pages deploy dist --project-name store-build",
     "pages:login": "wrangler login"
   },
   "dependencies": {

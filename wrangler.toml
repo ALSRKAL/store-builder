@@ -1,5 +1,7 @@
 # Cloudflare Pages Configuration
-name = "store-app"
+# يجب أن يطابق اسم المشروع المنشور فعلاً (store-build.pages.dev)؛
+# اسم مختلف كان سينشئ مشروعاً جديداً بدل تحديث الموقع الحالي.
+name = "store-build"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
