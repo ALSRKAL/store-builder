@@ -1,0 +1,27 @@
+{
+  "name": "store-api",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers API for Store App",
+  "main": "api/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create store-db",
+    "db:schema": "wrangler d1 execute store-db --file=schema.sql",
+    "db:import": "wrangler d1 execute store-db --file=../data/export/import.sql",
+    "db:query": "wrangler d1 execute store-db --command",
+    "tail": "wrangler tail"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "d1",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

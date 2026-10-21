@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  StoreBuilder Dynamic Sitemap
+  This is a fallback static sitemap.
+  For dynamic content, use: /api/seo/sitemap.xml
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  
+  <!-- الصفحة الرئيسية - Landing Page -->
+  <url>
+    <loc>https://store-build.pages.dev/</loc>
+    <lastmod>2024-12-31</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://store-build.pages.dev/"/>
+  </url>
+  
+  <!-- صفحة الشروط والأحكام - Terms Page -->
+  <url>
+    <loc>https://store-build.pages.dev/terms</loc>
+    <lastmod>2024-12-31</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  
+  <!-- صفحة تسجيل الدخول للتجار - Admin Login -->
+  <url>
+    <loc>https://store-build.pages.dev/admin</loc>
+    <lastmod>2024-12-31</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+</urlset>

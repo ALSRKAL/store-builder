@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- ===== Performance Optimizations ===== -->
+    <!-- DNS Prefetch & Preconnect للموارد الخارجية -->
+    <link rel="dns-prefetch" href="https://store-api.storecolection947.workers.dev">
+    <link rel="dns-prefetch" href="https://pub-fce2b764fffd4736b80ca407cd6c0283.r2.dev">
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+    <link rel="dns-prefetch" href="https://www.gstatic.com">
+    
+    <link rel="preconnect" href="https://store-api.storecolection947.workers.dev" crossorigin>
+    <link rel="preconnect" href="https://pub-fce2b764fffd4736b80ca407cd6c0283.r2.dev" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!--
+      Alexandria (display) + IBM Plex Sans Arabic (text/data): one request.
+      Loaded once here; do not @import the same families in CSS.
+    -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap">
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="StoreBuilder - أنشئ متجرك الإلكتروني في دقائق بدون برمجة. منصة عربية احترافية لإنشاء المتاجر الإلكترونية.">
+    <meta name="keywords" content="StoreBuilder, انشاء متجر, متجر الكتروني, منصة متاجر, تجارة الكترونية">
+    <meta name="author" content="StoreBuilder">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://store-build.pages.dev">
+    
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://store-build.pages.dev">
+    <meta property="og:title" content="StoreBuilder - أنشئ متجرك الإلكتروني مجاناً">
+    <meta property="og:description" content="منصة StoreBuilder لإنشاء المتاجر الإلكترونية في دقائق. بدون برمجة، بدون تعقيد.">
+    <meta property="og:image" content="https://store-build.pages.dev/og-image.png">
+    <meta property="og:locale" content="ar_SA">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="StoreBuilder - أنشئ متجرك الإلكتروني مجاناً">
+    <meta name="twitter:description" content="منصة StoreBuilder لإنشاء المتاجر الإلكترونية في دقائق.">
+    <meta name="twitter:image" content="https://store-build.pages.dev/og-image.png">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="StoreBuilder">
+    <meta name="theme-color" content="#F4F1E8">
+    
+    <link rel="apple-touch-icon" href="/icons/icon.svg">
+    <link rel="manifest" href="/manifest.json">
+    
+    <title>StoreBuilder - أنشئ متجرك الإلكتروني مجاناً</title>
+
+    <!-- Critical CSS Inline -->
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{font-family:'IBM Plex Sans Arabic',sans-serif;background:#f4f1e8;min-height:100vh}
+      #root{min-height:100vh}
+      .loader{width:32px;height:32px;border:2px solid #d8d2c2;border-top-color:#191710;border-radius:50%;animation:spin .8s linear infinite}
+      @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+    
+    <!-- Schema.org -->
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"SoftwareApplication","name":"StoreBuilder","description":"منصة StoreBuilder لإنشاء المتاجر الإلكترونية","url":"https://store-build.pages.dev","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"SAR"}}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

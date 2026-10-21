@@ -1,0 +1,35 @@
+# Cloudflare Workers Configuration - Optimized for Performance
+name = "store-api"
+main = "api/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ===== Performance Settings =====
+# تقليل Cold Start
+workers_dev = true
+
+# ===== D1 Database =====
+[[d1_databases]]
+binding = "DB"
+database_name = "store-db"
+database_id = "1cad1509-9ec3-47d9-9e19-6f4a72038198"
+
+# ===== R2 Storage =====
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "store-images"
+
+# ===== Environment Variables =====
+[vars]
+ENVIRONMENT = "production"
+FIREBASE_PROJECT_ID = "store-e82a9"
+R2_PUBLIC_URL = "https://pub-fce2b764fffd4736b80ca407cd6c0283.r2.dev"
+
+# ===== Development =====
+[dev]
+port = 8787
+local_protocol = "http"
+
+# ===== Observability =====
+[observability]
+enabled = true

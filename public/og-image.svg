@@ -1,0 +1,150 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- خلفية متدرجة حديثة -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4f46e5"/>
+      <stop offset="50%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+    
+    <!-- تأثير التوهج -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- ظل ناعم -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-opacity="0.25"/>
+    </filter>
+    
+    <!-- تأثير الزجاج المصنفر -->
+    <filter id="blur">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+  </defs>
+  
+  <!-- الخلفية الرئيسية -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  
+  <!-- عناصر زخرفية في الخلفية -->
+  <circle cx="100" cy="80" r="120" fill="white" opacity="0.04"/>
+  <circle cx="1100" cy="550" r="150" fill="white" opacity="0.04"/>
+  <circle cx="200" cy="500" r="80" fill="white" opacity="0.05"/>
+  <circle cx="1050" cy="120" r="100" fill="white" opacity="0.05"/>
+  
+  <!-- خطوط شبكة زخرفية -->
+  <g opacity="0.06" stroke="white" stroke-width="1.5" fill="none">
+    <line x1="0" y1="200" x2="1200" y2="200"/>
+    <line x1="0" y1="400" x2="1200" y2="400"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+  </g>
+  
+  <!-- أيقونة المتجر المحسّنة -->
+  <g transform="translate(470, 100)" filter="url(#shadow)">
+    <!-- خلفية دائرية -->
+    <circle cx="130" cy="110" r="140" fill="white" opacity="0.1"/>
+    
+    <!-- المبنى الرئيسي -->
+    <rect x="20" y="90" width="220" height="140" rx="15" fill="white" opacity="0.98"/>
+    
+    <!-- السقف -->
+    <path d="M 130,25 L 250,90 L 10,90 Z" fill="white" opacity="0.98"/>
+    <path d="M 130,25 L 250,90 L 10,90 Z" fill="#4f46e5" opacity="0.15"/>
+    
+    <!-- خط السقف -->
+    <line x1="130" y1="25" x2="130" y2="45" stroke="#a855f7" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="130" cy="20" r="6" fill="#a855f7"/>
+    
+    <!-- الباب -->
+    <rect x="100" y="155" width="60" height="75" rx="8" fill="#4f46e5"/>
+    <circle cx="145" cy="192" r="5" fill="white" opacity="0.9"/>
+    <line x1="130" y1="155" x2="130" y2="230" stroke="white" opacity="0.3" stroke-width="2"/>
+    
+    <!-- النوافذ اليسرى -->
+    <g opacity="0.9">
+      <rect x="35" y="110" width="45" height="45" rx="6" fill="#7c3aed" opacity="0.7"/>
+      <line x1="57.5" y1="110" x2="57.5" y2="155" stroke="white" opacity="0.4" stroke-width="2"/>
+      <line x1="35" y1="132.5" x2="80" y2="132.5" stroke="white" opacity="0.4" stroke-width="2"/>
+    </g>
+    
+    <!-- النوافذ اليمنى -->
+    <g opacity="0.9">
+      <rect x="180" y="110" width="45" height="45" rx="6" fill="#7c3aed" opacity="0.7"/>
+      <line x1="202.5" y1="110" x2="202.5" y2="155" stroke="white" opacity="0.4" stroke-width="2"/>
+      <line x1="180" y1="132.5" x2="225" y2="132.5" stroke="white" opacity="0.4" stroke-width="2"/>
+    </g>
+    
+    <!-- المظلة -->
+    <path d="M 90,155 L 30,175 L 170,175 Z" fill="#a855f7" opacity="0.8"/>
+    <path d="M 170,155 L 230,175 L 90,175 Z" fill="#a855f7" opacity="0.8"/>
+    
+    <!-- خطوط المظلة -->
+    <line x1="90" y1="155" x2="30" y2="175" stroke="white" opacity="0.3" stroke-width="1"/>
+    <line x1="130" y1="155" x2="100" y2="175" stroke="white" opacity="0.3" stroke-width="1"/>
+    <line x1="170" y1="155" x2="230" y2="175" stroke="white" opacity="0.3" stroke-width="1"/>
+  </g>
+  
+  <!-- عناصر زخرفية إضافية -->
+  <g opacity="0.7">
+    <!-- أيقونة عربة التسوق -->
+    <g transform="translate(280, 280)">
+      <rect x="2" y="12" width="28" height="22" rx="3" fill="white" opacity="0.9" filter="url(#glow)"/>
+      <circle cx="10" cy="40" r="4" fill="white" opacity="0.9"/>
+      <circle cx="24" cy="40" r="4" fill="white" opacity="0.9"/>
+      <path d="M -3,12 L 2,2 L 30,2 L 35,12" stroke="white" stroke-width="2.5" fill="none" opacity="0.9"/>
+    </g>
+    
+    <!-- أيقونة بطاقة الائتمان -->
+    <g transform="translate(870, 420)">
+      <rect x="0" y="0" width="45" height="32" rx="5" fill="white" opacity="0.9" filter="url(#glow)"/>
+      <rect x="0" y="8" width="45" height="7" fill="#4f46e5" opacity="0.7"/>
+      <rect x="6" y="20" width="18" height="4" rx="2" fill="#4f46e5" opacity="0.5"/>
+      <circle cx="35" cy="22" r="4" fill="#a855f7" opacity="0.6"/>
+    </g>
+    
+    <!-- نجوم تقييم -->
+    <g transform="translate(300, 480)" fill="white" opacity="0.8">
+      <path d="M 12,0 L 14,8 L 22,8 L 16,13 L 18,21 L 12,16 L 6,21 L 8,13 L 2,8 L 10,8 Z" filter="url(#glow)"/>
+    </g>
+    <g transform="translate(890, 240)" fill="white" opacity="0.8">
+      <path d="M 15,0 L 18,10 L 28,10 L 20,16 L 23,26 L 15,20 L 7,26 L 10,16 L 2,10 L 12,10 Z" filter="url(#glow)"/>
+    </g>
+  </g>
+  
+  <!-- النصوص -->
+  <g filter="url(#shadow)">
+    <!-- العنوان الرئيسي -->
+    <text x="600" y="410" font-family="'Helvetica Neue', Arial, sans-serif" font-size="80" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="-1" filter="url(#glow)">
+      StoreBuilder
+    </text>
+    
+    <!-- الشعار بالعربية -->
+    <text x="600" y="480" font-family="'Tajawal', Arial, sans-serif" font-size="38" fill="white" opacity="0.97" text-anchor="middle" font-weight="600">
+      أنشئ متجرك الإلكتروني مجاناً
+    </text>
+    
+    <!-- الشعار بالإنجليزية -->
+    <text x="600" y="535" font-family="'Helvetica Neue', Arial, sans-serif" font-size="30" fill="white" opacity="0.85" text-anchor="middle" font-weight="300">
+      Create Your Online Store - Free
+    </text>
+  </g>
+  
+  <!-- شريط زخرفي سفلي -->
+  <rect x="0" y="595" width="1200" height="35" fill="white" opacity="0.08"/>
+  
+  <!-- نقاط زخرفية -->
+  <g opacity="0.5">
+    <circle cx="100" cy="612" r="3.5" fill="white"/>
+    <circle cx="130" cy="612" r="3.5" fill="white"/>
+    <circle cx="160" cy="612" r="3.5" fill="white"/>
+    <circle cx="1040" cy="612" r="3.5" fill="white"/>
+    <circle cx="1070" cy="612" r="3.5" fill="white"/>
+    <circle cx="1100" cy="612" r="3.5" fill="white"/>
+  </g>
+</svg>

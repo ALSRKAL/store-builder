@@ -1,0 +1,275 @@
+/* =========================================================================
+   StoreBuilder — Design tokens
+   Direction: "دفتر التاجر" — paper, ink, hairline rules, tabular numbers.
+   See DESIGN.md. No gradients, no glass, no icon-tile decoration.
+   ========================================================================= */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ===== Surfaces & text ===== */
+  --bg: #f4f1e8;
+  --surface: #fcfaf3;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eae5d8;
+
+  --fg: #191710;
+  --fg-muted: #5a5446; /* 7.2:1 on surface */
+  --fg-subtle: #6a6353; /* 4.7:1 on sunken, 5.3:1 on paper */
+
+  /* ===== Rules, focus ===== */
+  --border: #d8d2c2;
+  --border-strong: #b5ac97;
+  --ring: #a8470a;
+
+  /* ===== Overlay ===== */
+  --scrim: #191710;
+  --scrim-fg: #fcfaf3;
+
+  /* ===== Identity ===== */
+  --primary: #191710;
+  --primary-light: #3b362b;
+  --primary-dark: #000000;
+  --primary-fg: #fcfaf3;
+
+  --secondary: #33564a;
+  --secondary-fg: #fcfaf3;
+
+  --accent: #a8470a; /* 5.6:1 both ways */
+  --accent-fg: #fcfaf3;
+
+  --highlight: #f2c14e;
+  --highlight-fg: #191710;
+
+  /* ===== Semantic states ===== */
+  --success: #1e6b4a;
+  --success-fg: #ffffff;
+  --warning: #8a5a00;
+  --warning-fg: #ffffff;
+  --danger: #a32a1e;
+  --danger-fg: #ffffff;
+  --info: #1f4e6b;
+  --info-fg: #ffffff;
+
+  --radius: 0.375rem; /* 6px */
+
+  /* ===== Store defaults (overridden per merchant by applyTheme) ===== */
+  --store-primary: #191710;
+  --store-secondary: #33564a;
+  --store-accent: #a8470a;
+  --store-primary-dark: #000000;
+  --store-body-bg: #f4f1e8;
+  --store-body-text: #191710;
+  --store-card-bg: #fcfaf3;
+  --store-card-text: #191710;
+  --store-card-secondary: #5a5446;
+  --store-header-bg: #f4f1e8;
+  --store-header-text: #191710;
+  --store-footer-bg: #191710;
+  --store-footer-text: #fcfaf3;
+  --store-border: #d8d2c2;
+  --store-button-radius: 4px;
+  --store-card-radius: 6px;
+  --store-button-text: #fcfaf3;
+  --store-primary-text: #191710;
+  --store-danger-text: #a32a1e;
+  --store-success-text: #1e6b4a;
+
+  /* ===== Legacy aliases (kept for older components) ===== */
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --card-bg: var(--surface);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--fg);
+  --input: var(--border-strong);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--fg-muted);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-fg);
+  --primary-foreground: var(--primary-fg);
+  --secondary-foreground: var(--secondary-fg);
+  --accent-foreground: var(--accent-fg);
+
+  --dark: var(--fg);
+  --dark-light: #3b362b;
+  --dark-lighter: #5a5446;
+  --gray: var(--fg-muted);
+  --gray-light: var(--fg-subtle);
+  --gray-lighter: var(--border);
+  --light: var(--bg);
+  --lighter: var(--surface);
+
+  --store-bg: var(--store-body-bg);
+  --store-text: var(--store-body-text);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    @apply bg-background text-foreground;
+    direction: rtl;
+    text-align: right;
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--highlight);
+    color: var(--highlight-fg);
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: 1.4;
+    text-wrap: balance;
+    letter-spacing: normal;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  img {
+    max-width: 100%;
+  }
+
+  input,
+  textarea,
+  select {
+    text-align: inherit;
+  }
+
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .container {
+    width: 100%;
+    max-width: 75rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  /* Marker highlight — solid block, used once per screen behind a phrase. */
+  .highlight-mark {
+    background: var(--highlight);
+    color: var(--highlight-fg);
+    padding-inline: 0.14em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-subtle);
+  background-clip: content-box;
+}
+
+/* Accordion height animation (Radix) */
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
