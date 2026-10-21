@@ -1,12 +1,16 @@
 /**
- * ProductSlider — one featured product at a time, controlled only by the user.
- * Split image/details, 1px merchant border, no auto-rotation or progress bar.
+ * ProductSlider — one featured product at a time.
+ * Auto-advances every 5s, pauses on hover/focus and when the tab is hidden,
+ * and respects prefers-reduced-motion. Manual buttons restart the timer.
+ * Split image/details, 1px merchant border, no progress bar.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Package } from 'lucide-react';
 import { useStore } from '../../contexts/StoreContext';
 import type { Product } from '../../schemas/product';
+
+const AUTOPLAY_MS = 5000;
 
 interface ProductSliderProps {
   products: Product[];
@@ -17,8 +21,29 @@ interface ProductSliderProps {
 export default function ProductSlider({ products, onProductClick, title = 'منتجات جديدة' }: ProductSliderProps): React.JSX.Element | null {
   const { formatPrice } = useStore();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isPageHidden, setIsPageHidden] = useState(() => typeof document !== 'undefined' && document.hidden);
+  // تغيير هذا الرقم يعيد تشغيل المؤقّت بعد أي تنقّل يدوي.
+  const [manualTick, setManualTick] = useState(0);
 
   const sliderProducts = products.slice(0, 6);
+
+  useEffect(() => {
+    const onVisibilityChange = (): void => setIsPageHidden(document.hidden);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (sliderProducts.length <= 1 || isPaused || isPageHidden) return;
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const timer = window.setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % sliderProducts.length);
+    }, AUTOPLAY_MS);
+    return () => window.clearInterval(timer);
+  }, [sliderProducts.length, isPaused, isPageHidden, manualTick]);
+
   if (sliderProducts.length === 0) return null;
 
   const safeIndex = currentIndex % sliderProducts.length;
@@ -26,11 +51,27 @@ export default function ProductSlider({ products, onProductClick, title = 'من�
   if (!currentProduct) return null;
   const image = currentProduct.images?.[0];
 
-  const nextSlide = (): void => setCurrentIndex((prev) => (prev + 1) % sliderProducts.length);
-  const prevSlide = (): void => setCurrentIndex((prev) => (prev - 1 + sliderProducts.length) % sliderProducts.length);
+  const nextSlide = (): void => {
+    setCurrentIndex((prev) => (prev + 1) % sliderProducts.length);
+    setManualTick((tick) => tick + 1);
+  };
+  const prevSlide = (): void => {
+    setCurrentIndex((prev) => (prev - 1 + sliderProducts.length) % sliderProducts.length);
+    setManualTick((tick) => tick + 1);
+  };
 
   return (
-    <section className="mb-8 max-md:mb-6" aria-roledescription="carousel" aria-label={title}>
+    <section
+      className="mb-8 max-md:mb-6"
+      aria-roledescription="carousel"
+      aria-label={title}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onFocusCapture={() => setIsPaused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsPaused(false);
+      }}
+    >
       <div className="mb-3 flex items-end justify-between gap-3 border-b border-[var(--store-border)] pb-3">
         <div className="flex items-baseline gap-3">
           <h2 className="font-display text-h3 font-semibold" style={{ color: 'var(--store-body-text)' }}>

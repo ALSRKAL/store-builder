@@ -127,6 +127,9 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderResult, setOrderResult] = useState<OrderResult | null>(null);
+  // إغلاق متحرّك: نغلق النافذة محلياً أولاً ثم ننفّذ منطق الأب بعد انتهاء الحركة.
+  const [isDialogOpen, setIsDialogOpen] = useState(true);
+  const closeTimer = useRef<number | null>(null);
 
   useEffect(() => {
     setCustomer(readSavedCustomer(storeKey));
@@ -293,8 +296,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
     }
   };
 
-  const close = (): void => {
-    if (submitting) return;
+  const finalizeClose = (): void => {
     const confirmedOrder = orderResult;
     if (confirmedOrder) {
       setStep(1);
@@ -311,10 +313,24 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
     else onClose();
   };
 
+  const requestClose = (): void => {
+    if (submitting || !isDialogOpen) return;
+    setIsDialogOpen(false);
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(finalizeClose, 220);
+  };
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+
   if (!isOpen) return null;
 
   return (
-    <Dialog open onOpenChange={(open) => (!open ? close() : undefined)}>
+    <Dialog open={isDialogOpen} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
       <DialogContent
         size="lg"
         title={
@@ -386,7 +402,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
                       <p className="mt-1 max-w-[46ch] text-label leading-relaxed text-fg-muted">
                         لم يضف المتجر طرق دفع بعد. يمكنك العودة إلى السلة وإرسال الطلب عبر واتساب.
                       </p>
-                      <Button type="button" variant="outline" onClick={onClose} className="mt-4">
+                      <Button type="button" variant="outline" onClick={requestClose} className="mt-4">
                         العودة إلى السلة
                       </Button>
                     </div>
@@ -632,7 +648,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
                     تواصل مع المتجر
                   </a>
                 ) : null}
-                <Button type="button" variant="outline" onClick={close} className="mt-3 w-full">
+                <Button type="button" variant="outline" onClick={requestClose} className="mt-3 w-full">
                   إغلاق
                 </Button>
               </div>

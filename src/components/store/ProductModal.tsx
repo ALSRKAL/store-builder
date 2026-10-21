@@ -9,7 +9,7 @@
  *   - نسخ الرابط ينسخ رابط المنتج الفعلي (المسار الجديد) لا رابط الصفحة.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check,
   ChevronLeft,
@@ -47,6 +47,23 @@ export default function ProductModal({ product, onClose }: ProductModalProps): R
   const [addedToCart, setAddedToCart] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
+  // نُغلق النافذة محلياً أولاً لتلعب حركة الخروج، ثم نغادر المسار.
+  const [isOpen, setIsOpen] = useState(true);
+  const closeTimer = useRef<number | null>(null);
+
+  const requestClose = (): void => {
+    if (!isOpen) return;
+    setIsOpen(false);
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => onClose(), 220);
+  };
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    },
+    [],
+  );
 
   const images = product.images ?? [];
   const outOfStock = product.inStock === false;
@@ -135,7 +152,7 @@ export default function ProductModal({ product, onClose }: ProductModalProps): R
 
   return (
     <>
-      <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <Dialog open={isOpen} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
         <DialogContent
           size="full"
           hideHeader
@@ -156,7 +173,7 @@ export default function ProductModal({ product, onClose }: ProductModalProps): R
             aria-label="إغلاق تفاصيل المنتج"
             className="absolute start-3 top-3 z-30 inline-flex size-11 items-center justify-center rounded-md border bg-[var(--store-card-bg)] text-[var(--store-card-text)] transition-colors hover:border-[var(--store-primary)]"
             style={{ borderColor: 'var(--store-border)' }}
-            onClick={onClose}
+            onClick={requestClose}
           >
             <X className="size-5" strokeWidth={1.75} aria-hidden />
           </button>
@@ -422,7 +439,7 @@ export default function ProductModal({ product, onClose }: ProductModalProps): R
         total={product.price}
         onSuccess={() => {
           setShowCheckout(false);
-          onClose();
+          requestClose();
         }}
       />
     </>

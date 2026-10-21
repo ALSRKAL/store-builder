@@ -114,6 +114,7 @@ export default function ThemePreviewFrame(): React.JSX.Element {
       ({
         cartItems: [],
         isCartOpen: false,
+        isHydrated: true,
         openCart: noop,
         closeCart: noop,
         addToCart: () => setCartCount((count) => count + 1),

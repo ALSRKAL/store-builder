@@ -112,7 +112,8 @@ const SheetContent = React.forwardRef<
               'fixed inset-0 z-[100] bg-scrim/60',
               'data-[state=open]:animate-in data-[state=open]:fade-in-0',
               'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
-              'duration-200',
+              // نفس مدة/منحنى انزلاق اللوحة حتى لا تختفي الخلفية قبلها.
+              'duration-300 ease-out-expo',
             )}
           />
         )}

@@ -54,6 +54,8 @@ export interface WelcomeMessage {
 interface CartContextValue {
   cartItems: CartItem[];
   isCartOpen: boolean;
+  /** اكتمل تحميل السلة من التخزين — يمنع قرارات خاطئة قبل معرفة محتواها. */
+  isHydrated: boolean;
   welcomeMessage: WelcomeMessage | null;
   isReturningCustomer: boolean;
   addToCart: (product: CartProductInput, options?: AddToCartOptions) => void;
@@ -94,6 +96,13 @@ const WELCOME_SHOWN_KEY = 'welcome_shown';
 export function CartProvider({ children, storeId }: CartProviderProps): React.JSX.Element {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  /**
+   * المتجر الذي اكتمل تحميل سلته. نستخدم المفتاح لا boolean لأن تبديل
+   * المتجر يجب ألا يكتب سلة المتجر السابق في مفتاح المتجر الجديد،
+   * ولأن StrictMode يعيد تشغيل التأثيرات فيجب ألا يمسح التخزين قبل القراءة.
+   */
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  const isHydrated = storeId ? hydratedKey === storeId : true;
   const [welcomeMessage, setWelcomeMessage] = useState<WelcomeMessage | null>(null);
   const [isReturningCustomer, setIsReturningCustomer] = useState(false);
 
@@ -149,12 +158,15 @@ export function CartProvider({ children, storeId }: CartProviderProps): React.JS
     } catch (e) {
       // التخزين قد يكون معطلاً (وضع خاص) أو ممتلئاً؛ لا نُسقط المتجر بسببه.
       console.error('Error loading cart:', e);
+    } finally {
+      setHydratedKey(storeId);
     }
   }, [storeId, getStorageKey]);
 
   // حفظ السلة في localStorage عند كل تغيير
   useEffect(() => {
-    if (!storeId) return;
+    // لا نكتب قبل اكتمال تحميل سلة هذا المتجر تحديداً.
+    if (!storeId || hydratedKey !== storeId) return;
 
     try {
       if (cartItems.length > 0) {
@@ -165,7 +177,7 @@ export function CartProvider({ children, storeId }: CartProviderProps): React.JS
     } catch (e) {
       console.error('Error saving cart:', e);
     }
-  }, [cartItems, storeId, getStorageKey]);
+  }, [cartItems, storeId, hydratedKey, getStorageKey]);
 
   // إضافة منتج للسلة
   const addToCart = useCallback(
@@ -284,6 +296,7 @@ export function CartProvider({ children, storeId }: CartProviderProps): React.JS
   const value: CartContextValue = {
     cartItems,
     isCartOpen,
+    isHydrated,
     welcomeMessage,
     isReturningCustomer,
     addToCart,

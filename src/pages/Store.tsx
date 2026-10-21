@@ -10,7 +10,7 @@
  * `popstate` الذي كان موجوداً هنا.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Package, Store as StoreIcon } from 'lucide-react';
@@ -78,7 +78,7 @@ function StoreSkeleton(): React.JSX.Element {
 
 function Store(): React.JSX.Element {
   const { store, products, loading, productsLoading, error, notFound, productsError, isStoreActive, refreshData } = useStore();
-  const { isCartOpen, openCart, closeCart, cartItems, getTotal, clearCart } = useCart();
+  const { isCartOpen, openCart, closeCart, cartItems, getTotal, clearCart, isHydrated } = useCart();
   const navigate = useNavigate();
   const params = useParams<{ storeId?: string; '*': string }>();
   const storeId = params.storeId ?? '';
@@ -123,20 +123,28 @@ function Store(): React.JSX.Element {
 
   // مزامنة مسار السلة مع حالة الدرج.
   // في /checkout نغلق الدرج لأن CheckoutModal طبقة مستقلة فوق الصفحة.
+  //
+  // `closingCartRef` يمنع إعادة فتح الدرج في اللحظة الفاصلة بين إغلاقه
+  // وتحديث المسار: كانت إعادة التصيير تُشغّل التأثير بينما المسار ما زال
+  // /cart والحالة false، فيُعاد الفتح ثم يُغلق — وميض واضح عند الإغلاق.
+  const closingCartRef = useRef(false);
   useEffect(() => {
     if (isCartRoute) {
-      if (!isCartOpen) openCart();
+      if (!isCartOpen && !closingCartRef.current) openCart();
       return;
     }
+    closingCartRef.current = false;
     if (isCartOpen) closeCart();
   }, [isCartRoute, isCartOpen, openCart, closeCart]);
 
   // مسار checkout بسلة فارغة → العودة للسلة (إلا بعد نجاح طلب: نُبقي شاشة التأكيد)
+  // لا نحكم قبل اكتمال تحميل السلة؛ وإلا حُوّل الرابط المباشر إلى /checkout
+  // إلى /cart لأن السلة تبدو فارغة في أول تصيير.
   useEffect(() => {
-    if (isCheckoutRoute && cartItems.length === 0 && !checkoutSubmitted) {
+    if (isCheckoutRoute && isHydrated && cartItems.length === 0 && !checkoutSubmitted) {
       navigate(`${basePath}/cart`, { replace: true });
     }
-  }, [isCheckoutRoute, cartItems.length, checkoutSubmitted, navigate, basePath]);
+  }, [isCheckoutRoute, isHydrated, cartItems.length, checkoutSubmitted, navigate, basePath]);
 
   // مغادرة checkout تُصفّر علامة النجاح حتى لا تُفتح شاشة تأكيد قديمة لاحقاً.
   useEffect(() => {
@@ -155,6 +163,7 @@ function Store(): React.JSX.Element {
     if (!isCartRoute) navigate(`${basePath}/cart`);
   };
   const closeCartRoute = (): void => {
+    closingCartRef.current = true;
     closeCart();
     if (isCartRoute) navigate(basePath, { replace: true });
   };
@@ -445,7 +454,12 @@ function Store(): React.JSX.Element {
         {isCheckoutRoute && (cartItems.length > 0 || checkoutSubmitted) ? (
           <CheckoutModal
             isOpen
-            onClose={() => navigate(`${basePath}/cart`, { replace: true })}
+            onClose={() => {
+              // افتح الدرج في نفس التصيير مع تغيير المسار حتى لا تظهر فجوة
+              // بين اختفاء نافذة الدفع وظهور السلة.
+              openCart();
+              navigate(`${basePath}/cart`, { replace: true });
+            }}
             items={cartItems}
             total={getTotal()}
             onOrderCreated={() => {
