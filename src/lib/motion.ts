@@ -38,6 +38,7 @@ export const transition = {
   fast: { duration: duration.fast, ease: ease.out } satisfies Transition,
   base: { duration: duration.base, ease: ease.out } satisfies Transition,
   medium: { duration: duration.medium, ease: ease.out } satisfies Transition,
+  slow: { duration: duration.slow, ease: ease.out } satisfies Transition,
   /** نوافذ: نابض خفيف يعطي إحساساً ملموساً دون مبالغة */
   modal: { type: 'spring', stiffness: 380, damping: 32, mass: 0.8 } satisfies Transition,
   /** أدراج: بلا نابض حتى لا تهتزّ الحواف عند توقّفها */

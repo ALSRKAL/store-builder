@@ -6,9 +6,11 @@
  */
 
 import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Package } from 'lucide-react';
 import { useStore } from '../../contexts/StoreContext';
 import type { Product } from '../../schemas/product';
+import { transition as motionTransition } from '../../lib/motion';
 
 const AUTOPLAY_MS = 5000;
 
@@ -33,6 +35,18 @@ export default function ProductSlider({ products, onProductClick, title = 'من�
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
+
+  // تحميل صور الشرائح مسبقاً: بدونها يبدأ التلاشي قبل وصول الصورة الجديدة
+  // فيظهر فراغ أو قفزة عند التبديل التلقائي.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    products.slice(0, 6).forEach((product) => {
+      const src = product.images?.[0];
+      if (!src) return;
+      const preload = new window.Image();
+      preload.src = src;
+    });
+  }, [products]);
 
   useEffect(() => {
     if (sliderProducts.length <= 1 || isPaused || isPageHidden) return;
@@ -117,28 +131,59 @@ export default function ProductSlider({ products, onProductClick, title = 'من�
         }}
       >
         <div className="relative aspect-[4/3] overflow-hidden bg-[var(--store-body-bg)] md:aspect-auto md:min-h-[340px]">
-          {image ? (
-            <img
-              src={image}
-              alt={currentProduct.name}
-              loading="lazy"
-              decoding="async"
-              className="absolute inset-0 size-full object-cover"
-            />
-          ) : (
-            <span className="absolute inset-0 flex items-center justify-center" role="img" aria-label={currentProduct.name}>
-              <Package className="size-10 text-[var(--store-card-secondary)]" strokeWidth={1.5} aria-hidden />
-            </span>
-          )}
+          <AnimatePresence initial={false} mode="sync">
+            {image ? (
+              <motion.img
+                key={currentProduct.id}
+                src={image}
+                alt={currentProduct.name}
+                loading="eager"
+                decoding="async"
+                className="absolute inset-0 size-full object-cover"
+                initial={{ opacity: 0, scale: 1.03 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.005 }}
+                transition={motionTransition.slow}
+              />
+            ) : (
+              <motion.span
+                key={currentProduct.id}
+                className="absolute inset-0 flex items-center justify-center"
+                role="img"
+                aria-label={currentProduct.name}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={motionTransition.base}
+              >
+                <Package className="size-10 text-[var(--store-card-secondary)]" strokeWidth={1.5} aria-hidden />
+              </motion.span>
+            )}
+          </AnimatePresence>
 
           {currentProduct.discount && currentProduct.discount > 0 ? (
-            <span className="absolute end-3 top-3 bg-[var(--danger)] px-2 py-1 text-[11px] font-semibold text-white" data-numeric>
+            <motion.span
+              key={`${currentProduct.id}-discount`}
+              className="absolute end-3 top-3 bg-[var(--danger)] px-2 py-1 text-[11px] font-semibold text-white"
+              data-numeric
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={motionTransition.base}
+            >
               -{currentProduct.discount}%
-            </span>
+            </motion.span>
           ) : null}
         </div>
 
-        <div className="flex flex-col justify-center border-t p-5 md:border-s md:border-t-0 md:p-7" style={{ borderColor: 'var(--store-border)' }}>
+        <motion.div
+          key={currentProduct.id}
+          className="flex min-h-[228px] flex-col justify-center border-t p-5 md:min-h-0 md:border-s md:border-t-0 md:p-7"
+          style={{ borderColor: 'var(--store-border)' }}
+          // يبدأ بشفافية جزئية بدل الصفر حتى لا يبدو النص وكأنه وميض.
+          initial={{ opacity: 0.35, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={motionTransition.medium}
+        >
           <p className="text-[11px] font-medium text-[var(--store-card-secondary)]">منتج مميز</p>
           <h3 className="mt-2 line-clamp-2 font-display text-h2 font-semibold leading-snug" style={{ color: 'var(--store-card-text)' }}>
             {currentProduct.name}
@@ -168,7 +213,7 @@ export default function ProductSlider({ products, onProductClick, title = 'من�
             عرض المنتج
             <ChevronLeft className="size-4" strokeWidth={1.75} aria-hidden />
           </span>
-        </div>
+        </motion.div>
       </button>
     </section>
   );
