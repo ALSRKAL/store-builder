@@ -34,7 +34,7 @@ release-artifact/
 *.pem
 *.key
 .mimosa/
-data/
+/data/
 .playwright-mcp/
 
 # Editor directories and files
