@@ -31,9 +31,13 @@ GH_HOST=github.com gh secret set CLOUDFLARE_API_TOKEN --env production \
 
 ## Firebase / FCM
 
-- إعداد الواجهة العام: `.env` و`.dev.vars` (مستثنان من Git).
-- حساب خدمة FCM: ملف خارج المشروع باسم `store-e82a9-firebase-adminsdk-*.json` (لا يُنسخ للمشروع).
-- في GitHub: `WORKER_SECRETS_JSON` يحتوي `FCM_CLIENT_EMAIL` و`FCM_PRIVATE_KEY` فقط.
+- **الإنتاج:** مشروع `store-e82a9`؛ حساب خدمة FCM في ملف خارج المشروع باسم `store-e82a9-firebase-adminsdk-*.json` (لا يُنسخ للمشروع).
+- **Staging:** مشروع منفصل `store-staging-947`.
+  - الإعداد العام وVAPID (مفتاح عام): `.secrets/staging-firebase.env`
+  - حساب خدمة Firebase Admin/FCM (مفتاح خاص): `.secrets/firebase-staging-service-account.json`
+- في GitHub: `WORKER_SECRETS_JSON` يحتوي `FCM_CLIENT_EMAIL` و`FCM_PRIVATE_KEY` فقط، ولكل بيئة مشروع Firebase مطابق.
+- هذان الملفان مستثنيان من Git عبر `.secrets/`؛ لا تُنسخ قيمهما إلى أي ملف يُرفع.
+
 
 ## قواعد
 

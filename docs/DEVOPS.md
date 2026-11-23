@@ -187,7 +187,7 @@ workflow يعطي نتيجة وإخفاقًا في GitHub؛ لا توجد قنا
 
 ## 8. حالة الربط ومتطلبات أول نشر
 
-تم ربط المشروع بالمستودع الخاص `ALSRKAL/store-builder` على `main`. بيئتا GitHub `staging` و`production` موجودتان. المتغيرات: `RELEASE_PRODUCTION_CONFIG` و`RELEASE_STAGING_CONFIG` و`CLOUDFLARE_ACCOUNT_ID`. الأسرار: `CLOUDFLARE_API_TOKEN` في البيئتين، و`WORKER_SECRETS_JSON` في الإنتاج وstaging (بلا قيم في Git).
+تم ربط المشروع بالمستودع العام `ALSRKAL/store-builder` على `main`، مع حماية `protect-main` (منع الحذف وforce-push) وSecret Scanning/Push Protection. بيئتا GitHub `staging` و`production` موجودتان. المتغيرات: `RELEASE_PRODUCTION_CONFIG` و`RELEASE_STAGING_CONFIG` و`CLOUDFLARE_ACCOUNT_ID`. الأسرار: `CLOUDFLARE_API_TOKEN` في البيئتين، و`WORKER_SECRETS_JSON` في الإنتاج وstaging (بلا قيم في Git).
 
 ### بيئة staging المنشأة (تجريبية، ليست الإنتاج)
 
@@ -197,13 +197,13 @@ workflow يعطي نتيجة وإخفاقًا في GitHub؛ لا توجد قنا
 | R2 | `store-staging-images` — عام عبر `https://pub-381deb7f60864eeb8b03e1fdac0b90dd.r2.dev` |
 | Pages | `store-staging` — `https://store-staging-bk4.pages.dev` (branch `main`) |
 | Worker | `store-staging-api` |
-| Firebase | **نفس مشروع الإنتاج العام** عبر `"sharedWithProduction": true` |
+| Firebase | مشروع مستقل `store-staging-947` (Auth Email/Password + Google، النطاق `store-staging-bk4.pages.dev` مصرّح) |
 
-قرار Firebase: Cloudflare وD1/R2/Pages منفصلة تمامًا، لكن Firebase Auth مشترك لأن إنشاء مشروع Firebase ثانٍ يتطلب Console يدويًا. الأثر: حسابات staging تُسجّل في نفس مجمع مستخدمي الإنتاج، لكن بيانات المتجر في D1 staging منفصلة. السياسة صريحة: `sharedWithProduction` مرفوضة في الإنتاج، وتتطلب تطابقًا حرفيًا لإعداد Firebase العام، ويُتحقق منها في `scripts/release/core.mjs` واختبارات `core.test.mjs`.
+قرار Firebase: أصبح staging منفصلًا بالكامل عن الإنتاج، بما في ذلك Firebase Auth. VAPID والإعداد العام في `.secrets/staging-firebase.env`، وحساب خدمة Firebase Admin/FCM في `.secrets/firebase-staging-service-account.json` (كلاهما مستثنى من Git). لا توجد مشاركة لمجمع مستخدمي الإنتاج.
 
 ### المتبقي قبل الإنتاج
-1. **موافقات الإنتاج:** GitHub رفض required reviewers بـHTTP 422 بسبب خطة المستودع الخاص؛ وrulesets رفضها بـHTTP 403. لا تُحوّل المستودع إلى عام ولا تُخفف الموافقة كحل تلقائي. المطلوب: خطة GitHub تدعم حماية بيئة private، أو قرار صريح بتغيير بوابة النشر. `PRODUCTION_APPROVAL_CONFIGURED=false` يبقي النشر متوقفًا.
-2. **D1 الإنتاج:** ليس فارغًا. الفحص القراءة فقط وجد `admins.trial_used` غائبًا، وغياب `error_logs` و`rate_limits` و`store_revisions` و`store_slug_aliases` و`trial_ledger` وmanaged history، مع فشل invariant للعلاقات. يحتاج نسخة قابلة للاستعادة ومعالجة توافق مراجعة قبل أول نشر.
+1. **بوابة الموافقة:** المستودع أصبح عامًا، وأُضيف `alsrkal2` كـRequired Reviewer لبيئة `production` مع `prevent_self_review=true` و`can_admins_bypass=false`، وفُعّل `PRODUCTION_APPROVAL_CONFIGURED=true`.
+2. **D1 الإنتاج:** ليس فارغًا. الفحص القراءة فقط وجد غياب `admins.trial_used` وغياب `error_logs` و`rate_limits` و`store_revisions` و`store_slug_aliases` و`trial_ledger` وmanaged history. يلزم قبل الترحيل: نسخة قابلة للاستعادة، ثم `ALTER TABLE admins ADD COLUMN trial_used INTEGER DEFAULT 0` (توافق إضافي مراجع)، ثم خطة adoption/proof والتحقق من invariants. لا تُنفّذ هذه الكتابة دون نسخة احتياطية ومراجعة.
 
 تظهر نتائج التشغيل الفعلية في تبويب Actions للمستودع؛ نجاح CI لا يعني نشرًا حيًا ناجحًا. ملفات النسخ الاحتياطية وcaptures لا تحفظ في Git ولا ترفع علنًا.
 
