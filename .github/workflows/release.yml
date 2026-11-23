@@ -33,7 +33,7 @@ jobs:
       - name: Identify staging promotion artifact (manual production only)
         if: github.event_name == 'workflow_dispatch'
         id: stage
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           STAGE_RUN: ${{ inputs.staging_run_id }}
         with:
@@ -55,7 +55,7 @@ jobs:
           path: promotion
       - name: Validate trusted default-branch Quality push and ancestry
         id: validate
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PRODUCTION_APPROVAL_CONFIGURED: ${{ vars.PRODUCTION_APPROVAL_CONFIGURED }}
           PRODUCTION_APPROVAL_MODE: ${{ vars.PRODUCTION_APPROVAL_MODE }}
@@ -87,7 +87,7 @@ jobs:
             core.setOutput('sha',sha); core.setOutput('quality_run_id',qualityId); core.setOutput('stage_run_id',process.env.STAGE_RUN || ''); core.setOutput('eligible','true');
       - name: Source validation result
         if: always()
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           RESULT: ${{ job.status }}
         with:
