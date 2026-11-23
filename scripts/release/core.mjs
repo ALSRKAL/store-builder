@@ -39,8 +39,21 @@ export function validateConfig(config, environment) {
 export function configPair(env = process.env) {
   const staging = validateConfig(JSON.parse(required(env.RELEASE_STAGING_CONFIG, 'RELEASE_STAGING_CONFIG')), 'staging');
   const production = validateConfig(JSON.parse(required(env.RELEASE_PRODUCTION_CONFIG, 'RELEASE_PRODUCTION_CONFIG')), 'production');
-  for (const getter of [c => c.workerName, c => c.pagesProject, c => c.d1.id, c => c.d1.name, c => c.r2.bucket, c => c.firebase.projectId, c => c.firebase.appId, c => c.firebase.messagingSenderId, c => c.r2PublicUrl, c => new URL(c.apiUrl).origin, c => new URL(c.siteUrl).origin]) {
-    if (getter(staging) === getter(production)) throw new Error('Staging and production must not share resource identities or origins');
+  const sharedFirebase = staging.firebase.sharedWithProduction === true;
+  const identities = [
+    ['Worker', c => c.workerName], ['Pages', c => c.pagesProject], ['D1 id', c => c.d1.id],
+    ['D1 name', c => c.d1.name], ['R2 bucket', c => c.r2.bucket], ['R2 public URL', c => c.r2PublicUrl],
+    ['API origin', c => new URL(c.apiUrl).origin], ['site origin', c => new URL(c.siteUrl).origin],
+    ...(sharedFirebase ? [] : [['Firebase project', c => c.firebase.projectId], ['Firebase app', c => c.firebase.appId], ['Firebase sender', c => c.firebase.messagingSenderId]]),
+  ];
+  for (const [label, getter] of identities) {
+    if (getter(staging) === getter(production)) throw new Error(`Staging and production must not share resource identities or origins (${label})`);
+  }
+  if (sharedFirebase) {
+    if (production.firebase.sharedWithProduction === true) throw new Error('Production must not declare sharedWithProduction');
+    for (const key of ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId', 'vapidKey']) {
+      if (staging.firebase[key] !== production.firebase[key]) throw new Error('Shared Firebase staging configuration must exactly match production public config');
+    }
   }
   return { staging, production };
 }

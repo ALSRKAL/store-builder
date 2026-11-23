@@ -187,14 +187,23 @@ workflow يعطي نتيجة وإخفاقًا في GitHub؛ لا توجد قنا
 
 ## 8. حالة الربط ومتطلبات أول نشر
 
-تم ربط المشروع بالمستودع الخاص `ALSRKAL/store-builder` على `main` ورفع الإصلاحات وملفات الأتمتة. تم إنشاء بيئتي GitHub `staging` و`production`، وحفظ `RELEASE_PRODUCTION_CONFIG`، وأسرار الإنتاج `CLOUDFLARE_ACCOUNT_ID` و`WORKER_SECRETS_JSON` بدون وضع قيمها في Git.
+تم ربط المشروع بالمستودع الخاص `ALSRKAL/store-builder` على `main`. بيئتا GitHub `staging` و`production` موجودتان. المتغيرات: `RELEASE_PRODUCTION_CONFIG` و`RELEASE_STAGING_CONFIG` و`CLOUDFLARE_ACCOUNT_ID`. الأسرار: `CLOUDFLARE_API_TOKEN` في البيئتين، و`WORKER_SECRETS_JSON` في الإنتاج وstaging (بلا قيم في Git).
 
-النشر الحي لم يُنفّذ. الفحص الفعلي وجد المتطلبات الآتية:
+### بيئة staging المنشأة (تجريبية، ليست الإنتاج)
 
-1. **Token نشر Cloudflare:** غير موجود في GitHub؛ إعداد Wrangler المحلي OAuth وR2 credentials ليسا بديلًا عن `CLOUDFLARE_API_TOKEN`. يُنشأ من Cloudflare → My Profile → API Tokens، بصلاحيات محدودة لـWorkers/Pages/D1/R2 للحساب المقصود، ثم يضاف إلى GitHub → Settings → Environments → Secrets.
-2. **staging:** لم تُوجد موارد D1/Pages/R2/Firebase منفصلة. إنشاء الموارد قد يترتب عليه تكلفة ويحتاج تأكيدًا، ثم ضبط `RELEASE_STAGING_CONFIG` وأسرار هذه البيئة.
-3. **موافقات الإنتاج:** GitHub رفض required reviewers بـHTTP 422 بسبب خطة المستودع الخاص؛ وrulesets رفضها بـHTTP 403. لا تُحوّل المستودع إلى عام ولا تُخفف الموافقة كحل تلقائي. اختر خطة تدعم الميزة أو مسار موافقة خارجي معتمد أولًا؛ `PRODUCTION_APPROVAL_CONFIGURED=false` يبقي النشر متوقفًا.
-4. **D1 الحالي:** ليس فارغًا. الفحص القراءة فقط وجد `admins.trial_used` غائبًا، وغياب `error_logs` و`rate_limits` و`store_revisions` و`store_slug_aliases` و`trial_ledger` وmanaged history، مع فشل invariant للعلاقات. يحتاج نسخة قابلة للاستعادة ومعالجة توافق بنية/علاقات مراجعة قبل أول نشر؛ لا تطبق baseline كاملًا عليه.
+| المورد | الاسم/المعرّف |
+|---|---|
+| D1 | `store-staging-db` — `1cea1e99-a108-45b6-abab-e802e63fb9c2` |
+| R2 | `store-staging-images` — عام عبر `https://pub-381deb7f60864eeb8b03e1fdac0b90dd.r2.dev` |
+| Pages | `store-staging` — `https://store-staging-bk4.pages.dev` (branch `main`) |
+| Worker | `store-staging-api` |
+| Firebase | **نفس مشروع الإنتاج العام** عبر `"sharedWithProduction": true` |
+
+قرار Firebase: Cloudflare وD1/R2/Pages منفصلة تمامًا، لكن Firebase Auth مشترك لأن إنشاء مشروع Firebase ثانٍ يتطلب Console يدويًا. الأثر: حسابات staging تُسجّل في نفس مجمع مستخدمي الإنتاج، لكن بيانات المتجر في D1 staging منفصلة. السياسة صريحة: `sharedWithProduction` مرفوضة في الإنتاج، وتتطلب تطابقًا حرفيًا لإعداد Firebase العام، ويُتحقق منها في `scripts/release/core.mjs` واختبارات `core.test.mjs`.
+
+### المتبقي قبل الإنتاج
+1. **موافقات الإنتاج:** GitHub رفض required reviewers بـHTTP 422 بسبب خطة المستودع الخاص؛ وrulesets رفضها بـHTTP 403. لا تُحوّل المستودع إلى عام ولا تُخفف الموافقة كحل تلقائي. المطلوب: خطة GitHub تدعم حماية بيئة private، أو قرار صريح بتغيير بوابة النشر. `PRODUCTION_APPROVAL_CONFIGURED=false` يبقي النشر متوقفًا.
+2. **D1 الإنتاج:** ليس فارغًا. الفحص القراءة فقط وجد `admins.trial_used` غائبًا، وغياب `error_logs` و`rate_limits` و`store_revisions` و`store_slug_aliases` و`trial_ledger` وmanaged history، مع فشل invariant للعلاقات. يحتاج نسخة قابلة للاستعادة ومعالجة توافق مراجعة قبل أول نشر.
 
 تظهر نتائج التشغيل الفعلية في تبويب Actions للمستودع؛ نجاح CI لا يعني نشرًا حيًا ناجحًا. ملفات النسخ الاحتياطية وcaptures لا تحفظ في Git ولا ترفع علنًا.
 

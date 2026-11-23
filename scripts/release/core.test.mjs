@@ -58,6 +58,16 @@ test('reject undeclared, null and non-string secret entries rather than deleting
   assert.deepEqual(checkSecrets(selected, { ...env, WORKER_SECRETS_JSON: JSON.stringify(secret) }), secret);
 });
 
+test('shared Firebase staging requires explicit opt-in and byte-identical public config', () => {
+  const s = config('staging'), p = config('production');
+  s.firebase = { ...p.firebase, sharedWithProduction: true };
+  assert.doesNotThrow(() => configPair(pair(s, p)));
+  assert.throws(() => configPair(pair({ ...s, firebase: { ...p.firebase, sharedWithProduction: true, vapidKey: 'other' } }, p)), /exactly match/);
+  assert.throws(() => configPair(pair(s, { ...p, firebase: { ...p.firebase, sharedWithProduction: true } })), /Production must not declare/);
+  const implicit = config('staging'); implicit.firebase = { ...p.firebase };
+  assert.throws(() => configPair(pair(implicit, p)), /share/);
+});
+
 test('generated Worker config includes all binding identities and initial SQLite DO migration', () => {
   const generated = workerConfig(config('staging'), '/project');
   assert.equal(generated.main, '/project/workers/api/index.ts');
