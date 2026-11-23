@@ -69,7 +69,7 @@ jobs:
         run: |
           node --input-type=module -e 'import fs from "node:fs";fs.writeFileSync("rollback-guard.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID}));'
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: rollback-guard-${{ github.run_id }}
           path: rollback-guard.json
@@ -113,7 +113,7 @@ jobs:
         run: |
           node --input-type=module -e 'import fs from "node:fs";fs.mkdirSync(".release",{recursive:true});if(!fs.existsSync(".release/report.json"))fs.writeFileSync(".release/report.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID,reason:"setup did not complete"}));'
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: rollback-${{ github.run_id }}
           path: .release/report.json

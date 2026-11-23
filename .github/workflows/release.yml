@@ -100,7 +100,7 @@ jobs:
         run: |
           node --input-type=module -e 'import fs from "node:fs"; fs.mkdirSync(".release",{recursive:true}); if(!fs.existsSync(".release/report.json")) fs.writeFileSync(".release/report.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID,reason:"setup or dependency installation did not complete"}));'
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-source-${{ github.run_id }}
           path: source-result.json
@@ -134,7 +134,7 @@ jobs:
       - run: npm ci
       - name: Build environment-specific artifacts from the same tested SHA (no cloud secrets)
         run: node scripts/release/cli.mjs build
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ matrix.environment }}-${{ github.run_id }}
           path: release-artifact/
@@ -147,7 +147,7 @@ jobs:
         run: |
           node --input-type=module -e 'import fs from "node:fs"; fs.mkdirSync(".release",{recursive:true}); if(!fs.existsSync(".release/report.json")) fs.writeFileSync(".release/report.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID,reason:"setup or dependency installation did not complete"}));'
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: build-report-${{ matrix.environment }}-${{ github.run_id }}
           path: .release/report.json
@@ -197,7 +197,7 @@ jobs:
         run: |
           node --input-type=module -e 'import fs from "node:fs"; fs.mkdirSync(".release",{recursive:true}); if(!fs.existsSync(".release/report.json")) fs.writeFileSync(".release/report.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID,reason:"setup or dependency installation did not complete"}));'
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: staging-result-${{ github.run_id }}
           path: |
@@ -256,7 +256,7 @@ jobs:
         run: |
           node --input-type=module -e 'import fs from "node:fs"; fs.mkdirSync(".release",{recursive:true}); if(!fs.existsSync(".release/report.json")) fs.writeFileSync(".release/report.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID,reason:"setup or dependency installation did not complete"}));'
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: production-result-${{ github.run_id }}
           path: |
