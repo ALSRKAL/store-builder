@@ -14,6 +14,7 @@ import { lazy } from 'react';
 import { useDashboard } from '../../../contexts/DashboardContext';
 import PageHeader from '../../../components/admin/layout/PageHeader';
 import ProductManager from '../../../components/admin/ProductManager';
+import { buildSettingsAdminData } from './settingsAdminData';
 
 const OrdersManager = lazy(() => import('../../../components/admin/OrdersManager'));
 const ThemeSettings = lazy(() => import('../../../components/admin/ThemeSettings'));
@@ -124,19 +125,7 @@ export function SettingsRoute(): React.JSX.Element {
         description="معلومات المتجر، العملة، الموقع، الروابط، الإشعارات ووسائل الدفع."
       />
       <SettingsTab
-        adminData={{
-          uid: user.uid,
-          storeName: adminData.storeName ?? '',
-          ...(adminData.email ? { email: adminData.email } : {}),
-          ...(adminData.whatsapp ? { whatsapp: adminData.whatsapp } : {}),
-          ...(adminData.logo ?? adminData.storeLogo
-            ? { logo: adminData.logo ?? adminData.storeLogo ?? '' }
-            : {}),
-          ...(adminData.storeId ? { storeId: adminData.storeId } : {}),
-          ...(adminData.subscriptionEnd
-            ? { subscriptionEnd: adminData.subscriptionEnd }
-            : {}),
-        }}
+        adminData={buildSettingsAdminData(adminData, user.uid)}
         storeCurrency={storeCurrency}
         storeIsActive={adminData.storeIsActive !== false}
         onSaveCurrency={saveCurrency}
