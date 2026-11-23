@@ -185,9 +185,18 @@ MONITOR_URLS_JSON=[{"kind":"readiness","url":"https://<api>/api/ready"},{"kind":
 
 workflow يعطي نتيجة وإخفاقًا في GitHub؛ لا توجد قناة Slack/WhatsApp مُفعّلة. فعّل إشعارات GitHub أو أضف قناة معتمدة لاحقًا. لا يوجد إصلاح تلقائي لكود الأعمال أو استرجاع بيانات غير مراقب.
 
-## 8. ما لم يُفعّل في هذه الجلسة؟
+## 8. حالة الربط ومتطلبات أول نشر
 
-لم يُنشأ remote/repository، ولم يحدث commit/push أو إنشاء موارد cloud أو نشر/SQL إنتاج. ملفات workflows اختُبرت محليًا وsyntax تحقق منها، وليست إثبات run ناجح داخل حساب GitHub أو deploy ناجح على Cloudflare.
+تم ربط المشروع بالمستودع الخاص `ALSRKAL/store-builder` على `main` ورفع الإصلاحات وملفات الأتمتة. تم إنشاء بيئتي GitHub `staging` و`production`، وحفظ `RELEASE_PRODUCTION_CONFIG`، وأسرار الإنتاج `CLOUDFLARE_ACCOUNT_ID` و`WORKER_SECRETS_JSON` بدون وضع قيمها في Git.
+
+النشر الحي لم يُنفّذ. الفحص الفعلي وجد المتطلبات الآتية:
+
+1. **Token نشر Cloudflare:** غير موجود في GitHub؛ إعداد Wrangler المحلي OAuth وR2 credentials ليسا بديلًا عن `CLOUDFLARE_API_TOKEN`. يُنشأ من Cloudflare → My Profile → API Tokens، بصلاحيات محدودة لـWorkers/Pages/D1/R2 للحساب المقصود، ثم يضاف إلى GitHub → Settings → Environments → Secrets.
+2. **staging:** لم تُوجد موارد D1/Pages/R2/Firebase منفصلة. إنشاء الموارد قد يترتب عليه تكلفة ويحتاج تأكيدًا، ثم ضبط `RELEASE_STAGING_CONFIG` وأسرار هذه البيئة.
+3. **موافقات الإنتاج:** GitHub رفض required reviewers بـHTTP 422 بسبب خطة المستودع الخاص؛ وrulesets رفضها بـHTTP 403. لا تُحوّل المستودع إلى عام ولا تُخفف الموافقة كحل تلقائي. اختر خطة تدعم الميزة أو مسار موافقة خارجي معتمد أولًا؛ `PRODUCTION_APPROVAL_CONFIGURED=false` يبقي النشر متوقفًا.
+4. **D1 الحالي:** ليس فارغًا. الفحص القراءة فقط وجد `admins.trial_used` غائبًا، وغياب `error_logs` و`rate_limits` و`store_revisions` و`store_slug_aliases` و`trial_ledger` وmanaged history، مع فشل invariant للعلاقات. يحتاج نسخة قابلة للاستعادة ومعالجة توافق بنية/علاقات مراجعة قبل أول نشر؛ لا تطبق baseline كاملًا عليه.
+
+تظهر نتائج التشغيل الفعلية في تبويب Actions للمستودع؛ نجاح CI لا يعني نشرًا حيًا ناجحًا. ملفات النسخ الاحتياطية وcaptures لا تحفظ في Git ولا ترفع علنًا.
 
 التغطية العامة بداية منخفضة (قرابة 15% lines في أول قياس)؛ المسارات الحساسة لها اختبارات وحدة/SQLite ومتصفح، لكن لا تدّعي هذه المنظومة أن كل صفحة مختبرة. زد الاختبارات عند أي ميزة جديدة.
 

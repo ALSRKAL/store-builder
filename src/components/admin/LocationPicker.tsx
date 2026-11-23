@@ -44,8 +44,15 @@ export default function LocationPicker({ currentLocation, onSave, onClose }: Loc
   const alive = useRef(true);
   const gpsGeneration = useRef(0);
 
+  const cancelGps = (): void => {
+    gpsGeneration.current += 1;
+    setGpsLoading(false);
+  };
+
   const choosePosition = (lat: number, lng: number): void => {
-    if (!isValidCoordinates(lat, lng)) return;
+    if (!alive.current || !isValidCoordinates(lat, lng)) return;
+    // A newer map/link/search selection owns the draft, not an older GPS request.
+    cancelGps();
     const next = { lat, lng };
     positionRef.current = next;
     setPosition(next);
@@ -76,24 +83,34 @@ export default function LocationPicker({ currentLocation, onSave, onClose }: Loc
     let cancelled = false;
     let disposeSize = (): void => {};
     let disposeTiles = (): void => {};
+    let ownedMap: NonNullable<typeof mapInstance.current> | null = null;
     setMapState('loading');
     void loadLeaflet().then((L) => {
       if (cancelled || !mapRef.current) return;
       const point = positionRef.current ?? { lat: 15.3694, lng: 44.1910 };
-      const map = L.map(mapRef.current).setView([point.lat, point.lng], positionRef.current ? 15 : 5);
+      // Leaflet 1.9.4 leaves a zoom-transition fallback timer alive after remove().
+      // This short-lived picker must not animate a camera or queue drag inertia
+      // while the merchant can immediately save/cancel and destroy its panes.
+      const map = L.map(mapRef.current, { zoomAnimation: false, markerZoomAnimation: false, inertia: false }).setView([point.lat, point.lng], positionRef.current ? 15 : 5);
+      ownedMap = map;
       mapInstance.current = map;
       disposeTiles = addMapTiles(L, map, () => { if (!cancelled) setMapState('ready'); }, () => { if (!cancelled) setMapState('error'); });
       if (positionRef.current) chooseRef.current(point.lat, point.lng);
-      map.on('click', (event) => chooseRef.current(event.latlng.lat, event.latlng.lng));
+      map.on('click', (event) => { if (!cancelled && mapInstance.current === map) chooseRef.current(event.latlng.lat, event.latlng.lng); });
       disposeSize = observeMapSize(map, mapRef.current);
     }).catch(() => { if (!cancelled) setMapState('error'); });
     return () => {
       cancelled = true;
       disposeSize();
       disposeTiles();
-      mapInstance.current?.remove();
-      mapInstance.current = null;
-      markerInstance.current = null;
+      const map = ownedMap;
+      if (mapInstance.current === map) {
+        mapInstance.current = null;
+        markerInstance.current = null;
+      }
+      // stop() cancels any in-progress keyboard/button pan before panes disappear.
+      map?.stop();
+      map?.remove();
     };
   }, [attempt]);
 
@@ -103,9 +120,14 @@ export default function LocationPicker({ currentLocation, onSave, onClose }: Loc
     setGpsLoading(true);
     setError(null);
     navigator.geolocation.getCurrentPosition((result) => {
-      if (!alive.current || generation !== gpsGeneration.current) return;
+      if (!alive.current || saveLock.current || generation !== gpsGeneration.current) return;
+      if (!isValidCoordinates(result.coords.latitude, result.coords.longitude)) {
+        setError('تعذّر تحديد موقعك. أعد المحاولة أو أدخل الموقع يدوياً.');
+        setGpsLoading(false);
+        return;
+      }
       choosePosition(result.coords.latitude, result.coords.longitude);
-      mapInstance.current?.setView([result.coords.latitude, result.coords.longitude], 17);
+      mapInstance.current?.setView([result.coords.latitude, result.coords.longitude], 17, { animate: false });
       setGpsLoading(false);
     }, (failure) => {
       if (!alive.current || generation !== gpsGeneration.current) return;
@@ -150,6 +172,8 @@ export default function LocationPicker({ currentLocation, onSave, onClose }: Loc
 
   const save = async (): Promise<void> => {
     if (saveLock.current) return;
+    // Pending GPS must not replace a draft while validation/save is in progress.
+    cancelGps();
     const point = latitude.trim() && longitude.trim() ? parseMapLink(`${latitude},${longitude}`) : null;
     if (!point) { setError('حدد الموقع أولاً. خط العرض بين -90 و90 وخط الطول بين -180 و180.'); return; }
     saveLock.current = true;
@@ -176,7 +200,7 @@ export default function LocationPicker({ currentLocation, onSave, onClose }: Loc
             <Button type="button" size="sm" variant="outline" onClick={() => void search()} disabled={searching || !searchQuery.trim()}>{searching ? <Loader2 className="size-4 animate-spin" aria-label="جاري البحث" /> : 'بحث'}</Button>
           </div>
           {searchMessage ? <p role="status" className="text-label text-fg-muted">{searchMessage}</p> : null}
-          {results.length ? <ul className="max-h-40 overflow-y-auto rounded-md border border-border bg-card">{results.map((result, index) => <li key={index}><button type="button" className="flex min-h-11 w-full items-start gap-2 p-3 text-start text-label hover:bg-muted" onClick={() => { choosePosition(result.lat, result.lng); setAddress(result.label); setResults([]); mapInstance.current?.setView([result.lat, result.lng], 17); }}><MapPin className="size-4 shrink-0" aria-hidden />{result.label}</button></li>)}</ul> : null}
+          {results.length ? <ul className="max-h-40 overflow-y-auto rounded-md border border-border bg-card">{results.map((result, index) => <li key={index}><button type="button" className="flex min-h-11 w-full items-start gap-2 p-3 text-start text-label hover:bg-muted" onClick={() => { choosePosition(result.lat, result.lng); setAddress(result.label); setResults([]); mapInstance.current?.setView([result.lat, result.lng], 17, { animate: false }); }}><MapPin className="size-4 shrink-0" aria-hidden />{result.label}</button></li>)}</ul> : null}
           <div className="relative h-[240px] overflow-hidden rounded-md border border-border bg-muted sm:h-[280px]">
             <div ref={mapRef} className="size-full" aria-label="خريطة اختيار الموقع" />
             {mapState !== 'ready' ? <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center gap-2 bg-surface-sunken p-5 text-center text-label text-fg-muted" role="status">
@@ -190,12 +214,12 @@ export default function LocationPicker({ currentLocation, onSave, onClose }: Loc
             <div className="flex flex-col gap-2 sm:flex-row"><Input id="location-link" value={mapLink} onChange={(event) => setMapLink(event.target.value)} placeholder="https://www.google.com/maps…" dir="ltr" /><Button type="button" variant="outline" onClick={() => {
               const point = parseMapLink(mapLink);
               if (!point) { setError('الرابط غير مدعوم أو لا يحتوي إحداثيات. استخدم رابط Google Maps مباشراً، OpenStreetMap أو خط العرض، خط الطول. الروابط المختصرة لا تُفتح تلقائياً.'); return; }
-              choosePosition(point.lat, point.lng); mapInstance.current?.setView([point.lat, point.lng], 16);
+              choosePosition(point.lat, point.lng); mapInstance.current?.setView([point.lat, point.lng], 16, { animate: false });
             }}>استخدام الموقع</Button></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label htmlFor="location-lat" className="mb-1.5 block">خط العرض</Label><Input id="location-lat" value={latitude} onChange={(event) => setLatitude(event.target.value)} inputMode="decimal" dir="ltr" placeholder="-90 … 90" /></div>
-            <div><Label htmlFor="location-lng" className="mb-1.5 block">خط الطول</Label><Input id="location-lng" value={longitude} onChange={(event) => setLongitude(event.target.value)} inputMode="decimal" dir="ltr" placeholder="-180 … 180" /></div>
+            <div><Label htmlFor="location-lat" className="mb-1.5 block">خط العرض</Label><Input id="location-lat" value={latitude} onChange={(event) => { cancelGps(); setLatitude(event.target.value); }} inputMode="decimal" dir="ltr" placeholder="-90 … 90" /></div>
+            <div><Label htmlFor="location-lng" className="mb-1.5 block">خط الطول</Label><Input id="location-lng" value={longitude} onChange={(event) => { cancelGps(); setLongitude(event.target.value); }} inputMode="decimal" dir="ltr" placeholder="-180 … 180" /></div>
           </div>
           <div><Label htmlFor="location-address" className="mb-1.5 block">العنوان (اختياري)</Label><Input id="location-address" value={address} onChange={(event) => setAddress(event.target.value)} maxLength={500} placeholder="المدينة، الحي، الشارع" /></div>
           <div><Label htmlFor="location-description" className="mb-1.5 block">وصف الموقع (اختياري)</Label><Textarea id="location-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="مثال: بجوار المسجد، الدور الثاني…" rows={2} maxLength={200} /><p className="mt-1 text-end text-[11px] text-fg-subtle" dir="ltr">{description.length}/200</p></div>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import LocationPicker from './LocationPicker';
 
@@ -22,6 +22,31 @@ describe('LocationPicker offline and saved location behavior', () => {
     expect(fetch).not.toHaveBeenCalled();
     fetch.mockRestore();
   });
+  it('keeps manual coordinates when an older GPS result arrives after editing', async () => {
+    let completeGps: PositionCallback | undefined;
+    const getCurrentPosition = vi.fn((success: PositionCallback) => { completeGps = success; });
+    const previous = Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { getCurrentPosition } });
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    try {
+      render(<LocationPicker currentLocation={{ lat: 15, lng: 44 }} onSave={onSave} onClose={() => {}} />);
+      await screen.findByRole('button', { name: 'إعادة تحميل الخريطة' });
+      fireEvent.click(screen.getByRole('button', { name: 'تحديد موقعي الحالي' }));
+      fireEvent.change(screen.getByLabelText('خط العرض'), { target: { value: '91' } });
+      await act(async () => { completeGps?.({ coords: { latitude: 15.3694, longitude: 44.191 } } as GeolocationPosition); });
+      expect(screen.getByLabelText('خط العرض')).toHaveValue('91');
+      fireEvent.click(screen.getByRole('button', { name: 'حفظ الموقع' }));
+      expect(screen.getByRole('alert')).toHaveTextContent('خط العرض بين -90 و90');
+      expect(onSave).not.toHaveBeenCalled();
+      fireEvent.change(screen.getByLabelText('خط العرض'), { target: { value: '15.5' } });
+      fireEvent.click(screen.getByRole('button', { name: 'حفظ الموقع' }));
+      await waitFor(() => expect(onSave).toHaveBeenCalledWith({ lat: 15.5, lng: 44, address: '', description: '', enabled: true }));
+    } finally {
+      if (previous) Object.defineProperty(navigator, 'geolocation', previous);
+      else Reflect.deleteProperty(navigator, 'geolocation');
+    }
+  });
+
   it('does not save a default unchosen location, parses direct links safely and offers retry', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<LocationPicker onSave={onSave} onClose={() => {}} />);

@@ -11,8 +11,9 @@ interface LeafletLatLng {
 }
 
 interface LeafletMap {
-  setView: (coords: [number, number], zoom: number) => LeafletMap;
-  invalidateSize: () => void;
+  setView: (coords: [number, number], zoom: number, options?: { animate?: boolean }) => LeafletMap;
+  invalidateSize: (options?: { animate?: boolean; pan?: boolean }) => void;
+  stop: () => LeafletMap;
   remove: () => void;
   on: (event: string, handler: (event: { latlng: LeafletLatLng }) => void) => void;
 }
@@ -30,6 +31,9 @@ interface LeafletStatic {
       scrollWheelZoom?: boolean;
       dragging?: boolean;
       zoomControl?: boolean;
+      zoomAnimation?: boolean;
+      markerZoomAnimation?: boolean;
+      inertia?: boolean;
     },
   ) => LeafletMap;
   tileLayer: (url: string, options: { attribution: string }) => { addTo: (map: LeafletMap) => void };

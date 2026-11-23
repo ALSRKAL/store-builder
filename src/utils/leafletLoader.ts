@@ -67,10 +67,15 @@ export function mapMarker(L: Leaflet): unknown {
 }
 
 export function observeMapSize(map: LeafletMap, element: HTMLElement): () => void {
-  const timer = window.setTimeout(() => map.invalidateSize(), 250);
-  const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => map.invalidateSize());
+  let disposed = false;
+  const resize = (): void => {
+    // ResizeObserver deliveries may already be queued when disconnect() runs.
+    if (!disposed && element.isConnected) map.invalidateSize({ animate: false, pan: false });
+  };
+  const timer = window.setTimeout(resize, 250);
+  const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
   observer?.observe(element);
-  return () => { window.clearTimeout(timer); observer?.disconnect(); };
+  return () => { disposed = true; window.clearTimeout(timer); observer?.disconnect(); };
 }
 
 /** Surface external tile failures as well as loader failures. */
