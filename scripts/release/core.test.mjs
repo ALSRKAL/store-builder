@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, symlinkSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { configPair, checkSecrets, workerConfig, buildEnv, run, treeHashes, validateQuality, validateStageRun, validateApproval, checkReadiness, validateRollback, httpsUrl } from './core.mjs';
+import { configPair, checkSecrets, workerConfig, buildEnv, run, treeHashes, validateQuality, validateStageRun, validateApproval, checkReadiness, validateRollback, httpsUrl, assembleBackupBase64 } from './core.mjs';
 
 function config(environment) {
   const prod = environment === 'production';
@@ -145,4 +145,12 @@ test('artifact hashes are deterministic, detect modifications and reject symlink
 
 test('monitor URL rejects local/plain HTTP and credential-bearing URLs', () => {
   for (const url of ['http://example.com', 'https://localhost', 'https://127.0.0.1', 'https://10.0.0.1', 'https://user:password@example.com', 'https://example.com?token=secret']) assert.throws(() => httpsUrl(url, 'monitor URL'));
+});
+
+test('adoption backup chunks are contiguous and ordered', () => {
+  assert.equal(assembleBackupBase64({ DB_ADOPTION_BACKUP_BASE64_1: 'AAA', DB_ADOPTION_BACKUP_BASE64_2: 'BBB' }), 'AAABBB');
+  assert.equal(assembleBackupBase64({ DB_ADOPTION_BACKUP_BASE64: 'single' }), 'single');
+  assert.equal(assembleBackupBase64({}), '');
+  assert.throws(() => assembleBackupBase64({ DB_ADOPTION_BACKUP_BASE64_1: 'AAA', DB_ADOPTION_BACKUP_BASE64_3: 'CCC' }), /contiguous/);
+  assert.throws(() => assembleBackupBase64({ DB_ADOPTION_BACKUP_BASE64_2: 'BBB' }), /contiguous/);
 });

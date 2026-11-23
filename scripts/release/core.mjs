@@ -7,6 +7,21 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 export const SHA = /^[0-9a-f]{40}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 export const required = (value, label) => { if (typeof value !== 'string' || !value.trim() || /[\r\n\0]/.test(value)) throw new Error(`Missing or invalid ${label}`); return value; };
+/**
+ * GitHub caps a single secret at 48KB, while a production D1 SQL export can be
+ * larger. Chunks are contiguous, ordered, and concatenated before decoding.
+ */
+export function assembleBackupBase64(env = process.env, maxParts = 8) {
+  const parts = [];
+  let gap = false;
+  for (let index = 1; index <= maxParts; index++) {
+    const value = env[`DB_ADOPTION_BACKUP_BASE64_${index}`];
+    if (!value) { gap = true; continue; }
+    if (gap) throw new Error('DB_ADOPTION_BACKUP_BASE64 parts must be contiguous from 1');
+    parts.push(value);
+  }
+  return parts.length ? parts.join('') : (env.DB_ADOPTION_BACKUP_BASE64 || '');
+}
 export function httpsUrl(value, label) {
   const url = new URL(required(value, label));
   const privateIp = /^(localhost|127\.|0\.|\[|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.)/;

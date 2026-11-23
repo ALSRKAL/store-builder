@@ -185,6 +185,36 @@ export async function getReferences(bundle) {
   })().catch(error => { referenceCache.delete(bundle.manifestSha256); throw error; }));
   return referenceCache.get(bundle.manifestSha256);
 }
+function splitTableBody(body) {
+  const parts = [], current = [];
+  let depth = 0;
+  for (const token of tokens(body)) {
+    if (token === '(') depth++;
+    else if (token === ')') depth--;
+    if (token === ',' && depth === 0) { parts.push(current.join(' ')); current.length = 0; }
+    else current.push(token);
+  }
+  if (current.length) parts.push(current.join(' '));
+  return parts.map(part => part.trim()).filter(Boolean).sort();
+}
+/**
+ * SQLite column order is not semantic for name-based access. Legacy production
+ * tables can have the same columns/constraints in a different order after
+ * additive ALTERs; compare them as an ordered-insensitive signature while still
+ * rejecting any missing, extra, or changed definition.
+ */
+export function schemaCompatible(actual, expected) {
+  if (normalized(actual) === normalized(expected)) return true;
+  if (!/^create\s+table/i.test(actual.trim()) || !/^create\s+table/i.test(expected.trim())) return false;
+  const signature = sql => {
+    const norm = normalized(sql);
+    const start = norm.indexOf('('), end = norm.lastIndexOf(')');
+    if (start < 0 || end <= start) return null;
+    return splitTableBody(norm.slice(start + 1, end)).join(' | ');
+  };
+  const left = signature(actual), right = signature(expected);
+  return left !== null && right !== null && left === right;
+}
 function compareSchema(actual, expected) {
   const relevant = actual.filter(s => !infra(s.name) && s.name !== HISTORY);
   const map = new Map(relevant.map(s => [`${s.type}:${s.name}`, s]));
@@ -192,7 +222,7 @@ function compareSchema(actual, expected) {
   for (const item of expected) {
     const existing = map.get(`${item.type}:${item.name}`);
     if (!existing) missing.push({ type: item.type, name: item.name });
-    else if (normalized(existing.sql) !== normalized(item.sql)) incompatible.push({ type: item.type, name: item.name, reason: 'SQL structure differs (columns/defaults/constraints/FKs/index/trigger definition)' });
+    else if (!schemaCompatible(existing.sql, item.sql)) incompatible.push({ type: item.type, name: item.name, reason: 'SQL structure differs (columns/defaults/constraints/FKs/index/trigger definition)' });
     map.delete(`${item.type}:${item.name}`);
   }
   return { missing, incompatible, unknown: [...map.values()].map(s => ({ type: s.type, name: s.name })) };

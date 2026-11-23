@@ -205,6 +205,18 @@ workflow يعطي نتيجة وإخفاقًا في GitHub؛ لا توجد قنا
 1. **بوابة الموافقة:** المستودع أصبح عامًا، وأُضيف `alsrkal2` كـRequired Reviewer لبيئة `production` مع `prevent_self_review=true` و`can_admins_bypass=false`، وفُعّل `PRODUCTION_APPROVAL_CONFIGURED=true`.
 2. **D1 الإنتاج:** ليس فارغًا. الفحص القراءة فقط وجد غياب `admins.trial_used` وغياب `error_logs` و`rate_limits` و`store_revisions` و`store_slug_aliases` و`trial_ledger` وmanaged history. يلزم قبل الترحيل: نسخة قابلة للاستعادة، ثم `ALTER TABLE admins ADD COLUMN trial_used INTEGER DEFAULT 0` (توافق إضافي مراجع)، ثم خطة adoption/proof والتحقق من invariants. لا تُنفّذ هذه الكتابة دون نسخة احتياطية ومراجعة.
 
+### خطوات ترحيل الإنتاج الأول (مُراجعة ومحاكاة محليًا)
+
+على نسخة محلية من نسخة الإنتاج الاحتياطية، نجحت الخطوات التالية وأعادت `foreignKeys/revisionCoverage/aliasCoverage/trialCoverage = 0`:
+
+1. `ALTER TABLE admins ADD COLUMN trial_used INTEGER DEFAULT 0;`
+2. تطبيق `workers/migrations-managed/0001_baseline.sql` (كله `IF NOT EXISTS`) لإنشاء `rate_limits` و`error_logs` والفهارس/triggers الناقصة.
+3. `DELETE FROM usage WHERE user_id NOT IN (SELECT id FROM admins);` — يحذف صف usage يتيمًا واحدًا كان يفشل `PRAGMA foreign_key_check`.
+4. بعد ذلك يصبح المخطط مطابقًا لـmanifest baseline (مع اختلاف ترتيب أعمدة فقط، يقبله فحص `schemaCompatible` الجديد)، ثم يُطبَّق proof/adoption ثم 0002/0003.
+
+نسخة الإنتاج الحالية 210KB، وbase64 لها نحو 281KB > حد GitHub 48KB للسر الواحد؛ لذلك يدعم `cli.mjs` الآن `DB_ADOPTION_BACKUP_BASE64_1..8` (أجزاء متصلة بالترتيب) إضافة إلى المتغير المفرد للنسخ الصغيرة.
+
+
 تظهر نتائج التشغيل الفعلية في تبويب Actions للمستودع؛ نجاح CI لا يعني نشرًا حيًا ناجحًا. ملفات النسخ الاحتياطية وcaptures لا تحفظ في Git ولا ترفع علنًا.
 
 التغطية العامة بداية منخفضة (قرابة 15% lines في أول قياس)؛ المسارات الحساسة لها اختبارات وحدة/SQLite ومتصفح، لكن لا تدّعي هذه المنظومة أن كل صفحة مختبرة. زد الاختبارات عند أي ميزة جديدة.

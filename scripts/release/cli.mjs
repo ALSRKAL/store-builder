@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { configPair, checkSecrets, workerConfig, buildEnv, run, fingerprint, writeJson, treeHashes, validateQuality, validateApproval, checkReadiness, validateRollback, SHA, UUID, required, httpsUrl, redactError } from './core.mjs';
+import { configPair, checkSecrets, workerConfig, buildEnv, run, fingerprint, writeJson, treeHashes, validateQuality, validateApproval, checkReadiness, validateRollback, SHA, UUID, required, httpsUrl, redactError, assembleBackupBase64 } from './core.mjs';
 import { buildWorkerArtifact, validateWorkerArtifact } from './worker-artifact.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -80,7 +80,7 @@ async function migrate(config, configFile) {
   if (env.DB_ADOPTION_PROOF_JSON) {
     const proof = JSON.parse(env.DB_ADOPTION_PROOF_JSON);
     const backupFile = resolve(work, 'adoption-backup.sql');
-    const encoded = required(env.DB_ADOPTION_BACKUP_BASE64, 'DB_ADOPTION_BACKUP_BASE64');
+    const encoded = required(assembleBackupBase64(env), 'DB_ADOPTION_BACKUP_BASE64');
     if (!/^[A-Za-z0-9+/=\r\n]+$/.test(encoded)) throw new Error('Invalid adoption backup encoding');
     const bytes = Buffer.from(encoded, 'base64');
     if (createHash('sha256').update(bytes).digest('hex') !== proof.backupSha256 || bytes.length !== proof.backupBytes) throw new Error('Adoption backup checksum/length mismatch');
