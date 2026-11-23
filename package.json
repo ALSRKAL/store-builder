@@ -58,7 +58,7 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.10.1",
     "tailwind-merge": "^3.4.0",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.72.0",
     "zod": "^4.2.1"
   },
