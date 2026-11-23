@@ -244,7 +244,7 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
                 </Button>
               </div>
               <p className="text-[12px] leading-relaxed text-fg-muted">
-                هذا بريد الدخول. تغييره يتطلب كلمة المرور الحالية، وحسابات Google تحتاج إعادة تسجيل دخول.
+                هذا بريد الدخول. سنرسل رابط تأكيد إلى البريد الجديد، ولن يتغير البريد حتى تفتح الرابط. حسابات Google تحتاج إعادة تسجيل دخول.
               </p>
             </dd>
           ) : (

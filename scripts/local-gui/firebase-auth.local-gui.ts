@@ -82,3 +82,6 @@ export async function updateEmail(_user: User, email: string) {
   localGuiIdentity(email); // Validation only; the token identity follows the stored email.
   change(makeUser(localGuiIdentity(email)));
 }
+export async function verifyBeforeUpdateEmail(_user: User, email: string) {
+  localGuiIdentity(email); // Validation only; no verification email is sent in local GUI.
+}

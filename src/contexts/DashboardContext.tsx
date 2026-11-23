@@ -516,14 +516,21 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
         if (oldLogo && storeUpdates.logo) void deleteImages([oldLogo]);
       }
       const normalizedEmail = email?.trim().toLowerCase();
+      let emailPending = false;
       if (normalizedEmail && normalizedEmail !== (adminData.email ?? '').toLowerCase()) {
         if (!password) throw new Error('PASSWORD_REQUIRED');
         await changeEmail(normalizedEmail, password);
-        // The Worker reconciles the same-UID email; this call makes it immediate.
-        await api.admin.updateProfile({ email: normalizedEmail });
+        // Firebase only swaps the address after the verification link is opened;
+        // the Worker reconciles admins.email from the verified token afterwards.
+        emailPending = true;
       }
-      if (Object.keys(storeUpdates).length > 0 || normalizedEmail) await refreshAdminData();
-      toast.success('تم تحديث معلومات المتجر');
+      if (Object.keys(storeUpdates).length > 0) {
+        await refreshAdminData();
+        toast.success('تم تحديث معلومات المتجر');
+      }
+      if (emailPending) {
+        toast.success('تم إرسال رابط تأكيد البريد', 'لن يتغير بريد الدخول حتى تفتح الرابط المرسل إلى البريد الجديد.');
+      }
     } catch (error) {
       const code = error instanceof Error ? error.message : '';
       const known: Record<string, [string, string]> = {
@@ -533,6 +540,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
         WRONG_PASSWORD: ['كلمة المرور غير صحيحة', 'أعد المحاولة.'],
         GOOGLE_ACCOUNT_RELOGIN: ['تغيير البريد يحتاج إعادة دخول', 'سجّل الدخول من جديد عبر Google ثم أعد المحاولة.'],
         EMAIL_IN_USE: ['البريد مستخدم بالفعل', 'اختر بريداً آخر.'],
+        EMAIL_VERIFICATION_REQUIRED: ['تأكيد البريد غير مفعّل', 'فعّل التحقق من البريد في Firebase أولاً.'],
         REAUTH_REQUIRED: ['الجلسة قديمة', 'سجّل الدخول من جديد ثم أعد المحاولة.'],
         LOGO_UPLOAD_FAILED: ['تعذّر رفع الشعار', 'أعد المحاولة.'],
       };

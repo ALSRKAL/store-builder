@@ -21,7 +21,7 @@ import {
   onAuthStateChanged,
   signInWithPopup,
   sendPasswordResetEmail,
-  updateEmail,
+  verifyBeforeUpdateEmail,
   reauthenticateWithCredential,
   EmailAuthProvider,
   type User as FirebaseUser,
@@ -201,15 +201,16 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
       throw new Error('WRONG_PASSWORD');
     }
     try {
-      await updateEmail(current, normalized);
+      // Firebase requires the new address to be verified before it replaces the
+      // login email; the token (and D1 profile) change only after the link click.
+      await verifyBeforeUpdateEmail(current, normalized);
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === 'auth/email-already-in-use') throw new Error('EMAIL_IN_USE');
       if (code === 'auth/requires-recent-login') throw new Error('REAUTH_REQUIRED');
+      if (code === 'auth/operation-not-allowed') throw new Error('EMAIL_VERIFICATION_REQUIRED');
       throw error;
     }
-    // Force the next API call to carry the new identity email.
-    await current.getIdToken(true);
   };
 
   const adoptProfile = (profile: AdminProfile, owner: FirebaseUser): void => {
