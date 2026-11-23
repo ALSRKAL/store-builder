@@ -28,7 +28,8 @@ import { StoreProvider } from './contexts/StoreContext';
 import { CartProvider } from './contexts/CartContext';
 import { PaymentProvider } from './contexts/PaymentContext';
 
-import type { AdminProfile } from './schemas';
+import { getEntitlementRoute } from './lib/authEntitlement';
+import ProfileRetry from './components/auth/ProfileRetry';
 
 // ===== Lazy Loading للصفحات =====
 // الصفحات الرئيسية - تحميل فوري
@@ -87,12 +88,6 @@ function PageLoader(): React.JSX.Element {
   );
 }
 
-// ===== Helper Functions =====
-function isSubscriptionValid(adminData: AdminProfile | null): boolean {
-  if (!adminData?.subscriptionEnd) return false;
-  return new Date(adminData.subscriptionEnd) > new Date();
-}
-
 // ===== Store Wrapper =====
 function StoreWrapper(): React.JSX.Element {
   const { storeId } = useParams<{ storeId: string }>();
@@ -120,11 +115,12 @@ interface ProtectedRouteProps {
 }
 
 function ProtectedRoute({ children, requireSetup = false, checkDashboard = false, requireSubscription = false }: ProtectedRouteProps): React.JSX.Element {
-  const { user, adminData, loading, isDashboardActive } = useAuth();
+  const { user, adminData, loading, isDashboardActive, profileError, entitlement } = useAuth();
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/admin" replace />;
-  if (requireSubscription && !isSubscriptionValid(adminData)) return <Navigate to="/admin/verify" replace />;
+  if (profileError && !adminData) return <ProfileRetry />;
+  if (requireSubscription && !entitlement.active) return <Navigate to="/admin/verify" replace />;
   if (checkDashboard && !isDashboardActive) return <Navigate to="/admin/blocked" replace />;
   if (requireSetup && !adminData?.storeName) return <Navigate to="/admin/setup" replace />;
 
@@ -133,11 +129,12 @@ function ProtectedRoute({ children, requireSetup = false, checkDashboard = false
 
 // ===== Verify Route =====
 function VerifyRoute(): React.JSX.Element {
-  const { user, adminData, loading } = useAuth();
+  const { user, adminData, loading, profileError, entitlement } = useAuth();
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/admin" replace />;
-  if (isSubscriptionValid(adminData)) {
-    return <Navigate to={adminData?.storeName ? '/admin/dashboard' : '/admin/setup'} replace />;
+  if (profileError && !adminData) return <ProfileRetry />;
+  if (entitlement.active) {
+    return <Navigate to={getEntitlementRoute(adminData)} replace />;
   }
   return (
     <Suspense fallback={<PageLoader />}>

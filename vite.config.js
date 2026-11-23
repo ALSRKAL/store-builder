@@ -36,9 +36,14 @@ function firebaseSwConfigPlugin(env) {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+  const isolatedBuild = process.env.STORE_ISOLATED_BUILD === 'true';
+  const env = isolatedBuild
+    ? Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('VITE_')))
+    : loadEnv(mode, __dirname, '');
 
   return {
+    root: __dirname,
+    ...(isolatedBuild ? { envDir: false } : {}),
     plugins: [react(), firebaseSwConfigPlugin(env)],
     resolve: {
     alias: {

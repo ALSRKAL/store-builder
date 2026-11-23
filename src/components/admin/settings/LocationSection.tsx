@@ -1,5 +1,6 @@
 import { MapPin, Pencil } from 'lucide-react';
 import type { LocationData } from '../LocationPicker';
+import { normalizeLocation } from '../../../utils/mapLocation';
 import { Button, Switch } from '../../ui';
 
 interface LocationSectionProps {
@@ -10,7 +11,8 @@ interface LocationSectionProps {
 }
 
 export function LocationSection({ location, toggling, onEdit, onToggle }: LocationSectionProps): React.JSX.Element {
-  if (location?.lat == null || location?.lng == null) {
+  const normalized = normalizeLocation(location);
+  if (!normalized) {
     return (
       <div className="border-y border-border py-5">
         <MapPin className="size-5 text-fg-subtle" strokeWidth={1.75} aria-hidden />
@@ -27,7 +29,7 @@ export function LocationSection({ location, toggling, onEdit, onToggle }: Locati
   return (
     <div className="flex flex-col gap-4">
       <p className="border-s-2 border-success ps-3 text-label leading-relaxed text-fg-muted">
-        {location.address ?? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
+        {normalized.address || `${normalized.lat.toFixed(4)}, ${normalized.lng.toFixed(4)}`}
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-3">
@@ -36,7 +38,7 @@ export function LocationSection({ location, toggling, onEdit, onToggle }: Locati
           <p className="mt-0.5 text-[12px] text-fg-muted">عند الإيقاف يبقى الموقع محفوظاً لكنه لا يظهر للعملاء.</p>
         </div>
         <Switch
-          checked={location.enabled !== false}
+          checked={normalized.enabled}
           onCheckedChange={onToggle}
           disabled={toggling}
           aria-label="إظهار موقع المتجر"

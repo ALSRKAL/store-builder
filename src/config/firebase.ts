@@ -4,7 +4,7 @@
  */
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence, type Auth } from 'firebase/auth';
+import { initializeAuth, GoogleAuthProvider, browserLocalPersistence, browserPopupRedirectResolver, type Auth } from 'firebase/auth';
 import { getMessaging, getToken, onMessage, type Messaging, type MessagePayload } from 'firebase/messaging';
 
 interface FirebaseConfig {
@@ -26,10 +26,9 @@ const firebaseConfig: FirebaseConfig = {
 };
 
 const app: FirebaseApp = initializeApp(firebaseConfig);
-export const auth: Auth = getAuth(app);
-
-// حفظ تسجيل الدخول في المتصفح (localStorage)
-void setPersistence(auth, browserLocalPersistence);
+// تهيئة التخزين فقط؛ Google iframe لا يُحمَّل على صفحة المتجر العامة.
+export const auth: Auth = initializeAuth(app, { persistence: browserLocalPersistence });
+export const googlePopupResolver = browserPopupRedirectResolver;
 
 export const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 

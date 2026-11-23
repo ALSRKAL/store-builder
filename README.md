@@ -82,37 +82,32 @@ npm run dev
 - المتجر: `/store/{storeId}`
 - لوحة التحكم: `/admin`
 
-## النشر
+## النشر والأتمتة
 
-### Cloudflare Pages
-اسم المشروع المنشور: `store-build` (https://store-build.pages.dev).
+النشر المعتمد الآن عبر GitHub Actions: فحوص الجودة → staging منفصلة → إنتاج بموافقة. أوامر النشر القديمة لا تتجاوز حواجز التحقق.
+
+راجع [دليل التشغيل والتفعيل](docs/DEVOPS.md) لمعرفة إعداد GitHub/Cloudflare، المتغيرات والأسرار المطلوبة، اعتماد قاعدة بيانات موجودة، ومعالجة نشر فاشل أو الرجوع للكود.
 
 ```bash
-# 1) بناء من هذا المجلد حتى تُقرأ قيم .env وتُولَّد firebase-config.js
-npm run build
-
-# 2) اعرف فرع الإنتاج مرة واحدة (يظهر في العمود Production branch)
-npx wrangler pages project list
-
-# 3) انشر إلى نفس المشروع وإلى فرع الإنتاج
-npx wrangler pages deploy dist --project-name store-build --branch <production-branch>
+nvm install
+nvm use
+npm ci
+npm exec --no -- playwright install --with-deps chromium
+npm run verify:ci
 ```
 
-أو باستخدام السكربت مع تمرير الفرع:
+`verify:ci` لا ينشر ولا يغيّر بيانات الإنتاج. اختبارات المتصفح والترحيلات تستخدم قواعد وملفات محلية مؤقتة. النشر الحقيقي يتوقف عند نقص الربط أو الموافقات.
+
+### Cloudflare Pages وWorker
+
+المشروع الحالي يستعمل Pages وWorker منفصلين. كل إصدار يُسجّل SHA ونسخ Worker/Pages وترحيلات D1. لا تنشر Pages وحدها إذا تغيّر API أو schema.
+
 ```bash
-npm run pages:deploy -- --branch <production-branch>
+# قراءة متطلبات الإصدار والتحقق منها؛ يتوقف بوضوح عند نقص الإعداد.
+npm run release:preflight
 ```
 
-> - لا تنشر بدون `--project-name`: اسم مشروع مختلف ينشئ مشروعاً جديداً بدل تحديث الموقع الحالي.
-> - إن ظهر رابط نشر بصيغة `<hash>.store-build.pages.dev` بدل الدومين الرئيسي، فالفرع ليس فرع الإنتاج؛ أعد النشر بالفرع الصحيح.
-> - كل نشر جديد يحتفظ بالنسخ السابقة في Deployments، ويمكن الرجوع لأي نسخة من لوحة Cloudflare إذا ظهرت مشكلة.
-> - لا تحتاج إلى إعادة نشر الـWorker لهذه التحديثات (لم تتغيّر ملفات `workers/`).
-
-### Cloudflare Workers (API)
-```bash
-cd workers
-npm run deploy
-```
+لا تطبّق مجلد migrations القديم كاملًا على قاعدة موجودة. السلسلة المعتمدة وفحص adoption موثقان في دليل DevOps. الرجوع لكود Worker/Pages **لا يعيد D1 أو R2 أو Durable Objects**.
 
 ## تطبيق Flutter (مولد الأكواد)
 

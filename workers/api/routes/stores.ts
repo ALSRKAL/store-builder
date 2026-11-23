@@ -273,6 +273,16 @@ async function updateStoreAnnouncement(env: Env, storeId: string, userId: string
 }
 
 async function updateStoreLocation(env: Env, storeId: string, userId: string, location: unknown): Promise<Response> {
+  if (!location || typeof location !== 'object' || Array.isArray(location)) return errorResponse('بيانات الموقع غير صالحة', 400);
+  const data = location as Record<string, unknown>;
+  const lat = data.lat ?? data.latitude;
+  const lng = data.lng ?? data.longitude;
+  if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return errorResponse('إحداثيات الموقع غير صالحة', 400);
+  if (data.enabled !== undefined && typeof data.enabled !== 'boolean') return errorResponse('حالة ظهور الموقع غير صالحة', 400);
+  for (const [key, limit] of [['address', 500], ['description', 200]] as const) {
+    if (data[key] != null && (typeof data[key] !== 'string' || (data[key] as string).length > limit)) return errorResponse('نص الموقع غير صالح أو طويل جداً', 400);
+  }
+  const normalizedLocation = { ...data, lat, lng };
   try {
     const store = await env.DB.prepare(`
       SELECT id FROM stores WHERE (id = ? OR slug = ?) AND owner_id = ?
@@ -284,7 +294,7 @@ async function updateStoreLocation(env: Env, storeId: string, userId: string, lo
 
     await env.DB.prepare(`
       UPDATE stores SET location = ?, updated_at = ? WHERE id = ?
-    `).bind(JSON.stringify(location), now(), store.id).run();
+    `).bind(JSON.stringify(normalizedLocation), now(), store.id).run();
 
     return jsonResponse({ success: true });
   } catch (error) {

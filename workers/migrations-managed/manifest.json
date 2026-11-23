@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "historyTable": "app_schema_migrations",
+  "migrations": [
+    {
+      "id": "0001",
+      "file": "0001_baseline.sql",
+      "sha256": "fb4358649df933136691348ef63d1e8d3851daf1f58c90686e889b2fe0be2404"
+    },
+    {
+      "id": "0002",
+      "file": "0002_store_revisions.sql",
+      "sha256": "e7a5f5d56f5fc917e341f6208e8dbda35aa9b1dd6f5ae4805dc50727283f057c"
+    },
+    {
+      "id": "0003",
+      "file": "0003_trial_ledger.sql",
+      "sha256": "620f615b2b874a095b3cad2893bf239535650dea1ee5b9637f1738cb9af65ed8"
+    }
+  ]
+}

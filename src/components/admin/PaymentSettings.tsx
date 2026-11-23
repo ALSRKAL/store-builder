@@ -23,20 +23,27 @@ function PaymentSettings(): React.JSX.Element {
   const [editing, setEditing] = useState<PaymentMethod | null>(null);
   const { ask, dialog } = useConfirm();
 
-  const fetchMethods = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const fetchMethods = useCallback(async (refresh = false): Promise<void> => {
+    if (!refresh) setLoading(true);
+    if (!refresh) setError(null);
     try {
       const result = await api.payments.getAll();
       const list = Array.isArray(result) ? result : (result as unknown as { data?: unknown }).data;
       setMethods(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error('Error fetching payment methods:', err);
-      setError('تعذّر جلب طرق الدفع.');
+      if (refresh) toast.error('تعذّر تحديث طرق الدفع، القائمة السابقة محفوظة');
+      else setError('تعذّر جلب طرق الدفع.');
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const closeDialog = useCallback((): void => {
+    setDialogOpen(false);
+    setEditing(null);
+  }, []);
+  const refreshMethods = useCallback(() => fetchMethods(true), [fetchMethods]);
 
   useEffect(() => {
     void fetchMethods();
@@ -142,7 +149,7 @@ function PaymentSettings(): React.JSX.Element {
               />
             ))}
           </div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => void fetchMethods()} className="gap-2 self-start text-fg-muted">
+          <Button type="button" variant="ghost" size="sm" onClick={() => void refreshMethods()} className="gap-2 self-start text-fg-muted">
             <RotateCcw className="size-3.5" strokeWidth={1.75} aria-hidden />
             تحديث القائمة
           </Button>
@@ -152,11 +159,8 @@ function PaymentSettings(): React.JSX.Element {
       <PaymentMethodDialog
         open={dialogOpen}
         editingMethod={editing}
-        onClose={() => {
-          setDialogOpen(false);
-          setEditing(null);
-        }}
-        onSaved={fetchMethods}
+        onClose={closeDialog}
+        onSaved={refreshMethods}
       />
     </div>
   );

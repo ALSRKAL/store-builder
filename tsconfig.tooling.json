@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext", "moduleResolution": "Bundler", "types": ["node", "vite/client"],
+    "strict": true, "skipLibCheck": true, "noEmit": true, "allowJs": true, "checkJs": false,
+    "esModuleInterop": true, "resolveJsonModule": true
+  },
+  "include": ["src/types/leaflet.d.ts", "playwright*.config.ts", "vite.gui.config.ts", "e2e/**/*.ts", "scripts/**/*.mjs",
+    "scripts/local-gui/identities.ts", "scripts/local-gui/firebase-auth.local-gui.ts",
+    "scripts/local-gui/firebase-config.local-gui.ts", "scripts/local-gui/browser-safety.local-gui.ts"],
+  "exclude": ["node_modules", "dist", "dist-ci", "scripts/local-gui/.vite-cache"]
+}

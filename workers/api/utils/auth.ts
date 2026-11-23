@@ -1,155 +1,116 @@
-/**
- * Firebase Authentication verification for Cloudflare Workers
- */
+/** Firebase ID token verification. A signature failure is always unauthorized. */
+import type { Env, AuthenticatedRequest, VerifiedUser } from '../types';
 
-import type { Env, AuthenticatedRequest, FirebaseUser, VerifiedUser } from '../types';
-
-// ===== Types =====
-
-interface TokenHeader {
+interface GoogleJwk extends JsonWebKey {
   kid: string;
-  alg: string;
 }
 
-interface TokenPayload {
-  user_id?: string;
-  sub: string;
-  email?: string;
-  email_verified?: boolean;
-  name?: string;
-  picture?: string;
-  auth_time?: number;
-  iat: number;
-  exp: number;
-  iss: string;
-  aud: string;
+interface KeySet {
+  keys: Map<string, GoogleJwk>;
+  expiresAt: number;
 }
-
-// ===== Constants =====
 
 const FIREBASE_PROJECT_ID = 'store-e82a9';
+const GOOGLE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+let cachedKeys: KeySet | null = null;
+let pendingKeys: Promise<KeySet> | null = null;
 
-// ===== Token Verification =====
+function decodeBase64Url(value: string): Uint8Array {
+  if (!value || !/^[A-Za-z0-9_-]+$/.test(value) || value.length % 4 === 1) {
+    throw new Error('Invalid base64url');
+  }
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')), (char) => char.charCodeAt(0));
+}
+
+function decodeObject(value: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(decodeBase64Url(value)));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid JWT object');
+  return parsed as Record<string, unknown>;
+}
+
+async function getGoogleKeys(): Promise<KeySet> {
+  if (cachedKeys && cachedKeys.expiresAt > Date.now()) return cachedKeys;
+  if (pendingKeys) return pendingKeys;
+  pendingKeys = (async () => {
+    const response = await fetch(GOOGLE_JWKS_URL);
+    if (!response.ok) throw new Error('Public key request failed');
+    const document = await response.json() as { keys?: GoogleJwk[] };
+    if (!Array.isArray(document.keys) || !document.keys.length) throw new Error('Invalid JWKS');
+    const keys = new Map<string, GoogleJwk>();
+    for (const key of document.keys) {
+      if (typeof key.kid !== 'string' || !key.kid || key.kty !== 'RSA' ||
+          typeof key.n !== 'string' || typeof key.e !== 'string' ||
+          (key.alg !== undefined && key.alg !== 'RS256') ||
+          (key.use !== undefined && key.use !== 'sig') || keys.has(key.kid)) {
+        throw new Error('Invalid signing key');
+      }
+      keys.set(key.kid, key);
+    }
+    const cacheControl = response.headers.get('cache-control') ?? '';
+    const maxAge = /(?:^|,)\s*max-age\s*=\s*"?(\d+)"?/i.exec(cacheControl);
+    const age = Math.max(0, Number(response.headers.get('age')) || 0);
+    const ttl = /(?:^|,)\s*(?:no-store|no-cache)(?:\s|,|$)/i.test(cacheControl)
+      ? 0 : Math.max(0, Number(maxAge?.[1] ?? 0) - age);
+    const result = { keys, expiresAt: Date.now() + ttl * 1000 };
+    cachedKeys = result;
+    return result;
+  })();
+  try {
+    return await pendingKeys;
+  } finally {
+    pendingKeys = null;
+  }
+}
+
+const isTimestamp = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 
 export async function verifyFirebaseToken(token: string, env: Env): Promise<VerifiedUser | null> {
   try {
-    const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
-    
     const parts = token.split('.');
-    if (parts.length !== 3) {
-      console.error('Invalid token format');
-      return null;
-    }
-
-    const header = JSON.parse(atob(parts[0])) as TokenHeader;
-    const payload = JSON.parse(atob(parts[1])) as TokenPayload;
-
-    if (!header.kid || header.alg !== 'RS256') {
-      console.error('Invalid token header');
-      return null;
-    }
-
+    if (parts.length !== 3) return null;
+    const header = decodeObject(parts[0]);
+    const payload = decodeObject(parts[1]);
+    if (header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid || header.crit !== undefined) return null;
+    const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID;
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp < now) {
-      console.error('Token expired');
-      return null;
-    }
+    if (payload.iss !== `https://securetoken.google.com/${projectId}` || payload.aud !== projectId ||
+        typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 128 ||
+        (payload.user_id !== undefined && payload.user_id !== payload.sub) ||
+        !isTimestamp(payload.exp) || payload.exp <= now ||
+        !isTimestamp(payload.iat) || payload.iat > now || payload.iat >= payload.exp ||
+        !isTimestamp(payload.auth_time) || payload.auth_time > now || payload.auth_time > payload.iat ||
+        (payload.nbf !== undefined && (!isTimestamp(payload.nbf) || payload.nbf > now))) return null;
+    if ((payload.email !== undefined && typeof payload.email !== 'string') ||
+        (payload.email_verified !== undefined && typeof payload.email_verified !== 'boolean') ||
+        (payload.name !== undefined && typeof payload.name !== 'string') ||
+        (payload.picture !== undefined && typeof payload.picture !== 'string')) return null;
 
-    const expectedIssuer = `https://securetoken.google.com/${projectId}`;
-    if (payload.iss !== expectedIssuer) {
-      console.error('Invalid issuer');
-      return null;
-    }
-
-    if (payload.aud !== projectId) {
-      console.error('Invalid audience');
-      return null;
-    }
-
-
-    const isValid = await verifyTokenSignature(token, header.kid);
-    
-    if (!isValid) {
-      console.warn('Signature verification skipped - using basic validation');
-    }
-
+    const keySet = await getGoogleKeys();
+    const jwk = keySet.keys.get(header.kid);
+    if (!jwk) return null;
+    const key = await crypto.subtle.importKey('jwk', jwk,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+    const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key,
+      decodeBase64Url(parts[2]), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
+    if (!valid) return null;
     return {
-      uid: payload.user_id || payload.sub,
-      email: payload.email,
-      emailVerified: payload.email_verified,
-      name: payload.name,
-      picture: payload.picture,
+      uid: payload.sub,
+      email: payload.email as string | undefined,
+      emailVerified: payload.email_verified as boolean | undefined,
+      name: payload.name as string | undefined,
+      picture: payload.picture as string | undefined,
       authTime: payload.auth_time,
       issuedAt: payload.iat,
-      expiresAt: payload.exp
+      expiresAt: payload.exp,
     };
-
-  } catch (error) {
-    console.error('Token verification error:', error);
+  } catch {
+    // Includes malformed tokens, network/JWKS/import failures and bad signatures.
+    // Never log the bearer token or accept stale keys after their cache lifetime.
     return null;
   }
 }
-
-async function verifyTokenSignature(token: string, kid: string): Promise<boolean> {
-  try {
-    const response = await fetch(
-      'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com',
-      { cf: { cacheTtl: 3600 } }
-    );
-
-    if (!response.ok) {
-      console.error('Failed to fetch public keys');
-      return false;
-    }
-
-    const keys = await response.json() as Record<string, string>;
-    const publicKey = keys[kid];
-
-    if (!publicKey) {
-      console.error('Public key not found for kid:', kid);
-      return false;
-    }
-
-    const pemHeader = '-----BEGIN CERTIFICATE-----';
-    const pemFooter = '-----END CERTIFICATE-----';
-    const pemContents = publicKey
-      .replace(pemHeader, '')
-      .replace(pemFooter, '')
-      .replace(/\s/g, '');
-
-    const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-
-    const cryptoKey = await crypto.subtle.importKey(
-      'spki',
-      binaryDer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
-
-    const parts = token.split('.');
-    const signatureInput = `${parts[0]}.${parts[1]}`;
-    const signature = Uint8Array.from(
-      atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')),
-      c => c.charCodeAt(0)
-    );
-
-    const isValid = await crypto.subtle.verify(
-      'RSASSA-PKCS1-v1_5',
-      cryptoKey,
-      signature,
-      new TextEncoder().encode(signatureInput)
-    );
-
-    return isValid;
-
-  } catch (error) {
-    console.error('Signature verification error:', error);
-    return false;
-  }
-}
-
-// ===== Helper Functions =====
 
 export function getUserId(request: AuthenticatedRequest): string | null {
   return request.user?.uid || null;

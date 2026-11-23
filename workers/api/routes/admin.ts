@@ -130,11 +130,18 @@ async function getAdminProfile(env: Env, userId: string, userEmail?: string): Pr
       }
     }
 
+    const usedTrial = await env.DB.prepare(`
+      SELECT 1 AS used FROM trial_ledger WHERE
+        (identity_type = 'uid' AND identity_value = ?) OR
+        (identity_type = 'email' AND identity_value = ?)
+      LIMIT 1
+    `).bind(userId, userEmail?.trim().toLowerCase() ?? '').first<{ used: number }>();
     if (!admin) {
-      return jsonResponse(null);
+      // Expose consumed eligibility even when the mutable profile was deleted.
+      return jsonResponse(usedTrial ? { id: userId, email: userEmail ?? '', trialUsed: true } : null);
     }
 
-    return jsonResponse(formatAdmin(admin));
+    return jsonResponse({ ...formatAdmin(admin), trialUsed: !!usedTrial || admin.trial_used === 1 });
   } catch (error) {
     console.error('Error fetching admin profile:', error);
     return errorResponse('Error fetching profile', 500);

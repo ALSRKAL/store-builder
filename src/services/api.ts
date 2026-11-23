@@ -51,9 +51,7 @@ import {
   verifyCodeResponseSchema,
   orderSchema,
   orderStatsSchema,
-  paymentMethodSchema,
   paymentMethodListSchema,
-  paymentReceiptSchema,
   paymentReceiptListSchema,
 } from '../schemas';
 import { ApiError, parseApiError } from '../schemas/api/errors';
@@ -241,10 +239,19 @@ type HealthCheckResponse = z.infer<typeof healthCheckSchema>;
 
 // Success response schema
 const successResponseSchema = z.object({
-  success: z.boolean(),
+  success: z.literal(true),
   message: z.string().optional(),
 });
 
+const createdPaymentSchema = successResponseSchema.extend({ id: z.string() });
+const toggledPaymentSchema = successResponseSchema.extend({ isActive: z.boolean() });
+const createdOrderSchema = successResponseSchema.extend({
+  orderId: z.string(),
+  orderNumber: z.string(),
+  whatsappLink: z.string().nullable(),
+});
+
+export type CreatedOrderResponse = z.infer<typeof createdOrderSchema>;
 type SuccessResponse = z.infer<typeof successResponseSchema>;
 
 // ===== Type-Safe API =====
@@ -425,20 +432,20 @@ export const api = {
     getAll: (): Promise<PaymentMethod[]> =>
       apiRequest('/api/payments', paymentMethodListSchema),
 
-    create: (data: CreatePaymentMethodInput): Promise<PaymentMethod> =>
-      apiRequest('/api/payments', paymentMethodSchema, {
+    create: (data: CreatePaymentMethodInput): Promise<z.infer<typeof createdPaymentSchema>> =>
+      apiRequest('/api/payments', createdPaymentSchema, {
         method: 'POST',
         body: data as Record<string, unknown>,
       }),
 
-    update: (id: string, data: UpdatePaymentMethodInput): Promise<PaymentMethod> =>
-      apiRequest(`/api/payments/${id}`, paymentMethodSchema, {
+    update: (id: string, data: UpdatePaymentMethodInput): Promise<SuccessResponse> =>
+      apiRequest(`/api/payments/${id}`, successResponseSchema, {
         method: 'PUT',
         body: data as Record<string, unknown>,
       }),
 
-    toggle: (id: string): Promise<PaymentMethod> =>
-      apiRequest(`/api/payments/${id}/toggle`, paymentMethodSchema, { method: 'PUT' }),
+    toggle: (id: string): Promise<z.infer<typeof toggledPaymentSchema>> =>
+      apiRequest(`/api/payments/${id}/toggle`, toggledPaymentSchema, { method: 'PUT' }),
 
     delete: (id: string): Promise<SuccessResponse> =>
       apiRequest(`/api/payments/${id}`, successResponseSchema, { method: 'DELETE' }),
@@ -457,8 +464,8 @@ export const api = {
       id: string,
       status: 'approved' | 'rejected',
       adminNotes?: string
-    ): Promise<PaymentReceipt> =>
-      apiRequest(`/api/payments/receipts/${id}/status`, paymentReceiptSchema, {
+    ): Promise<SuccessResponse> =>
+      apiRequest(`/api/payments/receipts/${id}/status`, successResponseSchema, {
         method: 'PUT',
         body: { status, adminNotes },
       }),
@@ -469,8 +476,8 @@ export const api = {
     getByStore: (slug: string): Promise<PaymentMethod[]> =>
       publicRequest(`/api/public/store/${slug}/payment-methods`, paymentMethodListSchema),
 
-    submitReceipt: (slug: string, data: SubmitReceiptInput): Promise<PaymentReceipt> =>
-      publicRequest(`/api/public/store/${slug}/payment-receipt`, paymentReceiptSchema, {
+    submitReceipt: (slug: string, data: SubmitReceiptInput): Promise<z.infer<typeof createdPaymentSchema>> =>
+      publicRequest(`/api/public/store/${slug}/payment-receipt`, createdPaymentSchema, {
         method: 'POST',
         body: data as Record<string, unknown>,
       }),
@@ -478,8 +485,8 @@ export const api = {
 
   // ===== Public Orders =====
   publicOrders: {
-    create: (slug: string, data: CreateOrderInput): Promise<Order> =>
-      publicRequest(`/api/public/store/${slug}/order`, orderSchema, {
+    create: (slug: string, data: CreateOrderInput): Promise<CreatedOrderResponse> =>
+      publicRequest(`/api/public/store/${slug}/order`, createdOrderSchema, {
         method: 'POST',
         body: data as Record<string, unknown>,
       }),

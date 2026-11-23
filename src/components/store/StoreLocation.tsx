@@ -4,12 +4,13 @@
  * الاتجاهات/الفتح 44px. أنماط Leaflet تُحمَّل مع المكوّن لا مع كل الصفحات.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, ChevronUp, ExternalLink, MapPin, Navigation } from 'lucide-react';
 import { transition as motionTransition } from '../../lib/motion';
 import { storeScopeStyle } from '../../utils/themeUtils';
-import '../../styles/leaflet.css';
+import { addMapTiles, loadLeaflet, mapMarker, observeMapSize } from '../../utils/leafletLoader';
+import { normalizeLocation } from '../../utils/mapLocation';
 
 export interface LocationData {
   lat: number;
@@ -27,64 +28,43 @@ export default function StoreLocation({ location }: StoreLocationProps): React.J
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<ReturnType<NonNullable<Window['L']>['map']> | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [mapLoaded, setMapLoaded] = useState(false);
-
-  const initMap = useCallback((): void => {
-    if (!mapRef.current || mapInstanceRef.current || !location) return;
-    const L = window.L;
-    if (!L) return;
-
-    const map = L.map(mapRef.current, { scrollWheelZoom: false, dragging: !L.Browser.mobile, zoomControl: true }).setView(
-      [location.lat, location.lng],
-      16,
-    );
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-    const icon = L.divIcon({
-      className: 'store-marker',
-      html: `<div class="store-marker-pin"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></div>`,
-      iconSize: [40, 40],
-      iconAnchor: [20, 40],
-    });
-    L.marker([location.lat, location.lng], { icon }).addTo(map);
-    mapInstanceRef.current = map;
-    setMapLoaded(true);
-    window.setTimeout(() => map.invalidateSize(), 100);
-  }, [location]);
+  const normalized = normalizeLocation(location);
+  const lat = normalized?.lat;
+  const lng = normalized?.lng;
+  const visible = normalized?.enabled === true;
+  const [mapState, setMapState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (location?.lat == null || location?.lng == null || !expanded) return;
-    const load = (): void => {
-      if (window.L) {
-        initMap();
-        return;
-      }
-      const existing = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
-      if (existing) {
-        existing.addEventListener('load', initMap, { once: true });
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
-      script.crossOrigin = '';
-      script.dataset['leaflet'] = 'true';
-      script.addEventListener('load', initMap, { once: true });
-      document.head.appendChild(script);
-    };
-    void load();
+    if (!visible || lat == null || lng == null || !expanded) return;
+    let cancelled = false;
+    let disposeSize = (): void => {};
+    let disposeTiles = (): void => {};
+    queueMicrotask(() => { if (!cancelled) setMapState('loading'); });
+    void loadLeaflet().then((L) => {
+      if (cancelled || !mapRef.current) return;
+      const map = L.map(mapRef.current, { scrollWheelZoom: false, dragging: !L.Browser.mobile, zoomControl: true }).setView([lat, lng], 16);
+      mapInstanceRef.current = map;
+      disposeTiles = addMapTiles(L, map, () => { if (!cancelled) setMapState('ready'); }, () => { if (!cancelled) setMapState('error'); });
+      L.marker([lat, lng], { icon: mapMarker(L) }).addTo(map);
+      disposeSize = observeMapSize(map, mapRef.current);
+    }).catch(() => { if (!cancelled) setMapState('error'); });
     return () => {
+      cancelled = true;
+      disposeSize();
+      disposeTiles();
       mapInstanceRef.current?.remove();
       mapInstanceRef.current = null;
     };
-  }, [expanded, initMap, location]);
+  }, [expanded, lat, lng, visible, attempt]);
 
-  if (location?.lat == null || location?.lng == null || location.enabled === false) return null;
+  if (!normalized || !visible || !location) return null;
 
   const openMaps = (): void => {
-    window.open(`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`, '_blank');
+    window.open(`https://www.google.com/maps/search/?api=1&query=${normalized.lat},${normalized.lng}`, '_blank', 'noopener,noreferrer');
   };
   const directions = (): void => {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`, '_blank');
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${normalized.lat},${normalized.lng}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -119,10 +99,9 @@ export default function StoreLocation({ location }: StoreLocationProps): React.J
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={motionTransition.base} className="px-5 pb-5 max-sm:px-4 max-sm:pb-4">
           <div className="relative mb-4 overflow-hidden rounded-md border border-[var(--store-border)] bg-muted">
             <div ref={mapRef} className="h-[200px] w-full max-sm:h-[180px]" />
-            {!mapLoaded ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface-sunken">
-                <span className="size-8 animate-spin rounded-full border-2 border-border border-t-[var(--store-primary)]" aria-hidden />
-                <span className="text-label text-fg-muted">جاري تحميل الخريطة…</span>
+            {mapState !== 'ready' ? (
+              <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center gap-2 bg-surface-sunken p-4 text-center" role="status">
+                {mapState === 'loading' ? <><span className="size-8 animate-spin rounded-full border-2 border-border border-t-[var(--store-primary)]" aria-hidden /><span className="text-label text-fg-muted">جاري تحميل الخريطة…</span></> : <><p className="text-label text-fg-muted">تعذّر تحميل الخريطة. استخدم الاتجاهات أو افتح الموقع في الخرائط أدناه.</p><button type="button" className="min-h-11 rounded-md border border-border px-3 text-label" onClick={() => setAttempt((value) => value + 1)}>إعادة المحاولة</button></>}
               </div>
             ) : null}
           </div>

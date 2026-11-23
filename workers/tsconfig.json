@@ -19,5 +19,5 @@
     "isolatedModules": true
   },
   "include": ["api/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "api/**/*.test.ts", "api/**/*.test.tsx"]
 }

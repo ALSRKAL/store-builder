@@ -1,0 +1,102 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6 verified official tag
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - name: Install exact locked dependencies (no deployment secrets)
+        run: npm ci
+      - name: Frontend types
+        run: npm run typecheck
+      - name: Worker types
+        run: npm run typecheck:worker
+      - name: Tooling and local end-to-end types
+        run: npm run typecheck:tooling
+      - name: Unit and integration tests with measured coverage thresholds
+        run: npm run test:coverage
+      - name: Release safety tests
+        run: npm run test:release
+      - name: Validate immutable migration history
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -n "$BASE_REF" && "$BASE_REF" != 0000000000000000000000000000000000000000 ]]; then
+            node scripts/db/migrations.mjs check --base "$BASE_REF"
+          else
+            npm run db:check
+          fi
+      - name: Fresh and legacy database adoption tests
+        run: npm run db:test
+      - name: Lint (new warnings blocked by reviewed baseline)
+        run: npm run lint:gate
+      - name: Repository credential guard (no secret values printed)
+        run: npm run security:secrets
+      - name: Dependency security audit (never auto-exempt)
+        run: npm run security:audit
+      - name: Production frontend build (CI-only configuration)
+        env:
+          VITE_API_URL: https://api.ci.invalid
+          VITE_R2_PUBLIC_URL: https://images.ci.invalid
+          VITE_FIREBASE_API_KEY: ci-public-placeholder
+          VITE_FIREBASE_AUTH_DOMAIN: store-ci.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: store-ci
+          VITE_FIREBASE_STORAGE_BUCKET: store-ci.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: '100000000000'
+          VITE_FIREBASE_APP_ID: '1:100000000000:web:ci'
+          VITE_FIREBASE_VAPID_KEY: ci-public-placeholder
+        run: npm run build:ci
+      - name: Assert real production CSS output
+        run: npm run check:css -- dist-ci
+      - name: Bundle Worker without cloud publishing
+        run: npm run build:worker
+      - name: Install browser for local-only end-to-end tests
+        run: npm exec --no -- playwright install --with-deps chromium
+      - name: Local-only end-to-end tests
+        run: npm run test:e2e
+      - name: Production-build end-to-end tests (local only)
+        run: npm run test:e2e:production
+      - name: Machine-readable quality result
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          mkdir -p .quality
+          node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync(".quality/result.json", JSON.stringify({sha:process.env.GITHUB_SHA,event:process.env.GITHUB_EVENT_NAME,status:process.env.RESULT,runId:process.env.GITHUB_RUN_ID}));'
+      - name: Upload diagnostics on success or failure (not deployment artifacts)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: quality-${{ github.run_id }}
+          path: |
+            .quality/result.json
+            artifacts/security/
+            artifacts/lint/
+            test-results/
+            playwright-report/
+            coverage/
+          retention-days: 14
+          if-no-files-found: warn

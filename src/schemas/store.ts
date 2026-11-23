@@ -74,12 +74,12 @@ export const socialLinksSchema = z.object({
 // `latitude/longitude` القديمة للتوافق مع بيانات سابقة.
 export const locationSchema = z.object({
   enabled: z.boolean().optional(),
-  lat: z.number().optional().nullable(),
-  lng: z.number().optional().nullable(),
-  description: z.string().optional().nullable(),
-  latitude: z.number().optional().nullable(),
-  longitude: z.number().optional().nullable(),
-  address: z.string().optional().nullable(),
+  lat: z.number().finite().min(-90).max(90).optional().nullable(),
+  lng: z.number().finite().min(-180).max(180).optional().nullable(),
+  description: z.string().max(200).optional().nullable(),
+  latitude: z.number().finite().min(-90).max(90).optional().nullable(),
+  longitude: z.number().finite().min(-180).max(180).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
   city: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
   googleMapsUrl: z.string().optional().nullable(),

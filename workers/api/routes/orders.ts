@@ -128,7 +128,7 @@ export async function createPublicOrder(env: Env, slug: string, data: OrderInput
       return errorResponse('طريقة الدفع غير موجودة', 404);
     }
 
-    if (paymentMethod.require_receipt === 1 && !receiptImage) {
+    if (paymentMethod.provider_id !== 'cod' && paymentMethod.require_receipt === 1 && !receiptImage) {
       return errorResponse('يجب رفع صورة إيصال الدفع', 400);
     }
 

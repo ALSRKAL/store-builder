@@ -3,6 +3,26 @@
    بدل حقنها في الحزمة الأساسية لكل الزوار.
    ========================================================================= */
 
+.store-map-marker {
+  background: var(--store-primary, var(--accent, #2563eb));
+  border: 3px solid white;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 25%);
+}
+
+.leaflet-container {
+  direction: ltr;
+  isolation: isolate;
+  font-family: inherit;
+}
+
+.leaflet-control-zoom a {
+  min-width: 36px;
+  min-height: 36px;
+}
+
+
 .store-marker,
 .custom-marker {
   background: none !important;

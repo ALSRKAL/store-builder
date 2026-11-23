@@ -74,6 +74,7 @@ export const createPaymentMethodSchema = z.object({
 
 // Update payment method schema
 export const updatePaymentMethodSchema = z.object({
+  countryCode: z.string().optional(),
   label: z.string().optional(),
   name: z.string().optional(),
   configDetails: z.record(z.string(), z.unknown()).optional(),

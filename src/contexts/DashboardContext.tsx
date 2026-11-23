@@ -403,7 +403,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
   const handleSaveLocation = async (location: LocationData): Promise<void> => {
     if (!adminData?.storeId) return;
     try {
-      const locationData = { ...location, enabled: true };
+      const locationData = { ...location, enabled: location.enabled ?? storeLocation?.enabled ?? true };
       await api.stores.updateLocation(adminData.storeId, locationData);
       setStoreLocation(locationData);
       toast.success('تم حفظ موقع المتجر');
@@ -417,7 +417,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
   const handleToggleLocationVisibility = async (): Promise<void> => {
     if (!adminData?.storeId || !storeLocation) return;
     try {
-      const updatedLocation = { ...storeLocation, enabled: !storeLocation.enabled };
+      const updatedLocation = { ...storeLocation, enabled: storeLocation.enabled === false };
       await api.stores.updateLocation(adminData.storeId, updatedLocation);
       setStoreLocation(updatedLocation);
     } catch (error) {

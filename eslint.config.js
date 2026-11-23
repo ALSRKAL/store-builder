@@ -48,7 +48,7 @@ export default defineConfig([
   // ملفات Service Worker تعمل في سياق Worker لا المتصفح/Node، فمتغيّراتها
   // (importScripts, clients, firebase) غير معرّفة في globals. تجاهلها اتساقاً
   // مع الإدخال الحالي public/sw.js.
-  globalIgnores(['dist', '.wrangler', 'workers', 'public/sw.js', 'public/**/*sw.js']),
+  globalIgnores(['dist', 'dist-ci', 'coverage', '**/artifacts/**', 'test-results', 'playwright-report', '**/.wrangler/**', '**/.vite-cache/**', 'scripts/local-gui/*.bundle.mjs']),
 
   /* ===== ملفات JavaScript ===== */
   {
@@ -102,5 +102,25 @@ export default defineConfig([
       'react-hooks/immutability': 'warn',
       'react-refresh/only-export-components': 'warn',
     },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { ...baseLanguageOptions, globals: globals.node },
+    rules: { ...js.configs.recommended.rules, 'no-unused-vars': ['error', { argsIgnorePattern: '^_' }] },
+  },
+  {
+    files: ['workers/**/*.ts', 'e2e/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'react-hooks/exhaustive-deps': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: ['public/**/*sw.js', 'public/sw.js'],
+    languageOptions: { globals: { ...globals.serviceworker, firebase: 'readonly' } },
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
 ])

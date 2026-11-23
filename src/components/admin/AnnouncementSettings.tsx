@@ -4,7 +4,8 @@
  * lucide فقط (أُزيلت الإيموجي من القوالب).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import AnnouncementBar from '../store/AnnouncementBar';
 import {
   Check,
   Clock,
@@ -88,45 +89,28 @@ const DEFAULT_SETTINGS: AnnouncementData = {
 };
 
 export default function AnnouncementSettings({ announcement, onSave, saving = false }: AnnouncementSettingsProps): React.JSX.Element {
-  const [settings, setSettings] = useState<AnnouncementData>(DEFAULT_SETTINGS);
-  const [hasChanges, setHasChanges] = useState(false);
-
-  // نقارن دائماً بالقيم الافتراضية + المحفوظة، لا بكائن فارغ: بدون ذلك كان
-  // زر الحفظ مفعّلاً عند فتح الصفحة دون أي تغيير.
   const baseline = useMemo<AnnouncementData>(
     () => ({ ...DEFAULT_SETTINGS, ...(announcement ?? {}) }),
     [announcement],
   );
-
-  useEffect(() => {
-    setSettings(baseline);
-  }, [baseline]);
-
-  useEffect(() => {
-    setHasChanges(JSON.stringify(settings) !== JSON.stringify(baseline));
-  }, [settings, baseline]);
+  const baselineKey = JSON.stringify(baseline);
+  const [draft, setDraft] = useState<{ baseline: string; settings: AnnouncementData } | null>(null);
+  const settings = draft?.baseline === baselineKey ? draft.settings : baseline;
+  const hasChanges = JSON.stringify(settings) !== baselineKey;
+  const setSettings = (next: AnnouncementData | ((current: AnnouncementData) => AnnouncementData)): void => {
+    setDraft({ baseline: baselineKey, settings: typeof next === 'function' ? next(settings) : next });
+  };
 
   const update = <K extends keyof AnnouncementData>(key: K, value: AnnouncementData[K]): void => {
     setSettings((current) => ({ ...current, [key]: value }));
   };
-
-  const SelectedIcon = AVAILABLE_ICONS.find((item) => item.id === settings.icon)?.icon ?? Megaphone;
 
   return (
     <div className="flex flex-col gap-5">
       {settings.message ? (
         <div className="border-y border-border py-3">
           <p className="mb-2 text-[11px] text-fg-subtle">معاينة</p>
-          <div
-            className="flex items-center justify-center gap-2 px-4 py-2.5 text-label font-medium"
-            style={{ backgroundColor: settings.backgroundColor, color: settings.textColor }}
-          >
-            <SelectedIcon size={16} aria-hidden />
-            <span>{settings.message}</span>
-            {settings.link && settings.linkText ? (
-              <span className="ms-2 bg-white/20 px-2 py-0.5 font-semibold">{settings.linkText}</span>
-            ) : null}
-          </div>
+          <AnnouncementBar announcement={settings} preview />
         </div>
       ) : null}
 
@@ -261,6 +245,27 @@ export default function AnnouncementSettings({ announcement, onSave, saving = fa
           />
         ) : null}
       </div>
+
+      <fieldset className="space-y-2">
+        <legend className="text-label font-medium text-foreground">طريقة عرض النص</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { value: false, label: 'ثابت', description: 'النص كامل بدون حركة' },
+            { value: true, label: 'متحرك', description: 'يتحرك مثل شريط الأخبار' },
+          ].map((option) => (
+            <label key={option.label} className={cn(
+              'flex min-h-16 cursor-pointer items-center gap-3 rounded-md border px-3 py-2',
+              settings.isScrolling === option.value ? 'border-foreground bg-muted' : 'border-border',
+            )}>
+              <input type="radio" name="announcement-motion" value={String(option.value)} checked={settings.isScrolling === option.value} onChange={() => update('isScrolling', option.value)} className="size-4" />
+              <span>
+                <span className="block text-label font-medium text-foreground">{option.label}</span>
+                <span className="block text-[12px] text-fg-muted">{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <div className="divide-y divide-border border-y border-border">
         <label className="flex min-h-12 items-center justify-between gap-3 py-2 text-label text-fg-muted">

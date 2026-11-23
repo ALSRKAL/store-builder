@@ -32,7 +32,8 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../contexts/StoreContext';
 import { usePayment } from '../../contexts/PaymentContext';
-import { getProviderById } from '../../config/paymentProviders';
+import { getProviderById, providerFieldValue, providerRequiresReceipt } from '../../config/paymentProviders';
+import { PaymentProviderIcon } from '../admin/payments/PaymentProviderIcon';
 import { api } from '../../services/api';
 import { compressImage, getSupportedFormats, isValidImageFile } from '../../utils/imageCompressor';
 import { toEnglishNumbers } from '../../utils/numberUtils';
@@ -128,20 +129,54 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
   const [error, setError] = useState<string | null>(null);
   const [orderResult, setOrderResult] = useState<OrderResult | null>(null);
   // إغلاق متحرّك: نغلق النافذة محلياً أولاً ثم ننفّذ منطق الأب بعد انتهاء الحركة.
-  const [isDialogOpen, setIsDialogOpen] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(isOpen);
   const closeTimer = useRef<number | null>(null);
+  const submitLock = useRef(false);
+  const receiptGeneration = useRef(0);
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setCustomer(readSavedCustomer(storeKey));
   }, [storeKey]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setError(null);
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setIsDialogOpen(isOpen);
+    if (isOpen) setError(null);
+    else {
+      receiptGeneration.current += 1;
+      setCompressing(false);
+    }
   }, [isOpen]);
 
-  const requiresReceipt = (method: SchemaPaymentMethod | null): boolean =>
-    Boolean(method?.requireReceipt || method?.requiresReceipt);
+  const requiresReceipt = providerRequiresReceipt;
+
+  useEffect(() => {
+    if (!isOpen || paymentsPending || !selectedPayment || orderResult) return;
+    const current = paymentMethods.find((method) => method.id === selectedPayment.id && method.isActive !== false);
+    if (!current) {
+      setSelectedPayment(null);
+      setPaymentNotice('طريقة الدفع المختارة لم تعد متاحة. بياناتك محفوظة؛ ارجع لاختيار طريقة أخرى.');
+      receiptGeneration.current += 1;
+      setReceiptImage(null);
+      setReceiptPreview(null);
+      setCompressing(false);
+      return;
+    }
+    if (JSON.stringify(current) !== JSON.stringify(selectedPayment)) {
+      const changed = requiresReceipt(current) !== requiresReceipt(selectedPayment) ||
+        JSON.stringify(current.displayInfo ?? current.configDetails) !== JSON.stringify(selectedPayment.displayInfo ?? selectedPayment.configDetails);
+      setSelectedPayment(current);
+      if (changed) {
+        receiptGeneration.current += 1;
+        setReceiptImage(null);
+        setReceiptPreview(null);
+        setCompressing(false);
+        setPaymentNotice('تم تحديث تفاصيل طريقة الدفع. راجع التفاصيل قبل الإرسال؛ بياناتك محفوظة.');
+      }
+    }
+  }, [isOpen, paymentMethods, paymentsPending, selectedPayment, orderResult, requiresReceipt]);
 
   const totalSteps = requiresReceipt(selectedPayment) ? 3 : 2;
   const itemsCount = items.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
@@ -170,6 +205,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
     // نصفّر الحقل دائماً حتى يمكن اختيار الملف نفسه مجدداً بعد خطأ.
     event.target.value = '';
     if (!file) return;
+    const generation = ++receiptGeneration.current;
     if (!isValidImageFile(file)) {
       setError('صيغة الملف غير مدعومة. استخدم JPG أو PNG أو WebP.');
       return;
@@ -182,17 +218,19 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
     setError(null);
     try {
       const compressed = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85, outputFormat: 'webp' });
+      if (generation !== receiptGeneration.current) return;
       setReceiptImage(compressed);
       const reader = new FileReader();
-      reader.onload = (loadEvent) => setReceiptPreview(loadEvent.target?.result as string);
+      reader.onload = (loadEvent) => { if (generation === receiptGeneration.current) setReceiptPreview(loadEvent.target?.result as string); };
       reader.readAsDataURL(compressed);
     } catch {
+      if (generation !== receiptGeneration.current) return;
       setReceiptImage(file);
       const reader = new FileReader();
-      reader.onload = (loadEvent) => setReceiptPreview(loadEvent.target?.result as string);
+      reader.onload = (loadEvent) => { if (generation === receiptGeneration.current) setReceiptPreview(loadEvent.target?.result as string); };
       reader.readAsDataURL(file);
     } finally {
-      setCompressing(false);
+      if (generation === receiptGeneration.current) setCompressing(false);
     }
   };
 
@@ -219,12 +257,17 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
   };
 
   const submitOrder = async (): Promise<void> => {
-    if (submitting) return;
+    if (submitLock.current || paymentsPending || !selectedPayment || orderResult) return;
+    if (requiresReceipt(selectedPayment) && !receiptImage) {
+      setError('يرجى رفع صورة إيصال الدفع');
+      return;
+    }
+    submitLock.current = true;
     setSubmitting(true);
     setError(null);
     try {
       let receiptBase64: string | undefined;
-      if (receiptImage) {
+      if (receiptImage && requiresReceipt(selectedPayment)) {
         receiptBase64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (event) => resolve(event.target?.result as string);
@@ -260,6 +303,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
           : undefined,
       };
       setOrderResult(order);
+      setPaymentNotice(null);
       setStep(4);
       // أبلغ الأب فوراً حتى يفرّغ السلة ولا يستطيع العميل إعادة إرسال الطلب.
       onOrderCreated?.();
@@ -267,12 +311,17 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
       console.error('Error submitting order:', err);
       setError(err instanceof Error ? err.message : 'تعذّر إرسال الطلب. بياناتك محفوظة — أعد المحاولة.');
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   };
 
   const next = (): void => {
     setError(null);
+    if (!selectedPayment || paymentsPending) {
+      setError('يرجى الرجوع واختيار طريقة دفع متاحة');
+      return;
+    }
     if (step === 1) {
       if (!selectedPayment) {
         setError('يرجى اختيار طريقة الدفع');
@@ -288,7 +337,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
       return;
     }
     if (step === 3) {
-      if (!receiptImage) {
+      if (requiresReceipt(selectedPayment) && !receiptImage) {
         setError('يرجى رفع صورة إيصال الدفع');
         return;
       }
@@ -309,7 +358,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
     setError(null);
     // إشعار الأب بالنجاح عند إغلاق شاشة التأكيد فقط، فتُفرَّغ السلة بعد أن
     // يرى العميل رقم طلبه — لا قبل ذلك.
-    if (confirmedOrder) onSuccess?.(confirmedOrder);
+    if (confirmedOrder && onSuccess) onSuccess(confirmedOrder);
     else onClose();
   };
 
@@ -322,8 +371,9 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
 
   useEffect(
     () => () => {
-      if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    },
+        if (closeTimer.current) window.clearTimeout(closeTimer.current);
+        receiptGeneration.current += 1;
+      },
     [],
   );
 
@@ -428,19 +478,24 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
                       <div key={method.id}>
                         <button
                           type="button"
-                          onClick={() => setSelectedPayment(method)}
+                          onClick={() => {
+                            if (selectedPayment?.id !== method.id) {
+                              receiptGeneration.current += 1;
+                              setReceiptImage(null);
+                              setReceiptPreview(null);
+                              setCompressing(false);
+                            }
+                            setSelectedPayment(method);
+                            setPaymentNotice(null);
+                            setError(null);
+                          }}
                           aria-pressed={selected}
                           className={cn(
                             'flex w-full items-center gap-3 rounded-md border p-3 text-start transition-colors',
                             selected ? 'border-[var(--store-accent)]' : 'border-border bg-card hover:border-border-strong',
                           )}
                         >
-                          <span
-                            aria-hidden
-                            className="inline-flex size-9 shrink-0 items-center justify-center border border-border text-fg-muted"
-                          >
-                            <Landmark className="size-4" strokeWidth={1.75} />
-                          </span>
+                          <PaymentProviderIcon type={provider?.type} />
                           <span className="min-w-0 flex-1 text-label font-medium text-foreground">
                             {method.label ?? method.name ?? provider?.name ?? 'طريقة دفع'}
                           </span>
@@ -461,14 +516,15 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
                             {display.phone || display.accountNumber ? (
                               <PaymentRow
                                 icon={Phone}
-                                label="رقم التحويل"
+                                label={provider?.type === 'bank' ? 'رقم الحساب' : 'رقم المحفظة'}
                                 value={display.phone ?? display.accountNumber ?? ''}
                                 copied={copiedField === 'phone'}
                                 onCopy={() => void copy(display.phone ?? display.accountNumber ?? '', 'phone')}
                               />
                             ) : null}
                             {display.accountName ? <PaymentRow icon={User} label="اسم الحساب" value={display.accountName} /> : null}
-                            {display.bankName ? <PaymentRow icon={Landmark} label="البنك" value={display.bankName} /> : null}
+                            {display.bankName ? <PaymentRow icon={Landmark} label="البنك" value={providerFieldValue(provider, 'bankName', display.bankName)} /> : null}
+                            {config['walletName'] ?? method.walletName ? <PaymentRow icon={CreditCard} label="المحفظة / التطبيق" value={config['walletName'] ?? method.walletName ?? ''} /> : null}
                             {display.iban ? (
                               <PaymentRow
                                 icon={FileText}
@@ -571,7 +627,13 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
               </div>
             ) : null}
 
-            {step === 3 ? (
+            {step === 3 && !requiresReceipt(selectedPayment) ? (
+              <div className="flex flex-col gap-4">
+                <p className="text-label text-fg-muted">طريقة الدفع الحالية لا تتطلب إيصالاً. راجع الطلب قبل الإرسال.</p>
+                <OrderReview items={items} total={total} formatPrice={formatPrice} />
+              </div>
+            ) : null}
+            {step === 3 && requiresReceipt(selectedPayment) ? (
               <div className="flex flex-col gap-4">
                 <div className="border-y border-border py-4">
                   <Camera className="size-5 text-fg-subtle" strokeWidth={1.75} aria-hidden />
@@ -616,6 +678,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
                     size="sm"
                     className="self-start text-danger hover:bg-danger/5 hover:text-danger"
                     onClick={() => {
+                      receiptGeneration.current += 1;
                       setReceiptImage(null);
                       setReceiptPreview(null);
                       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -654,6 +717,12 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
               </div>
             ) : null}
 
+            {paymentNotice ? (
+              <div role="alert" className="mt-3 rounded-md border border-border bg-muted p-3 text-label text-fg-muted">
+                <p>{paymentNotice}</p>
+                {step > 1 && step < 4 ? <Button type="button" variant="outline" className="mt-2" onClick={() => setStep(1)} disabled={submitting}>مراجعة طريقة الدفع</Button> : null}
+              </div>
+            ) : null}
             {error ? (
               <div role="alert" className="mt-3 flex items-start gap-2 rounded-md border border-danger/25 bg-danger/5 p-3 text-xs text-[var(--store-danger-text)]">
                 <AlertCircle className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden />
@@ -683,7 +752,7 @@ export default function CheckoutModal({ isOpen, onClose, items, total, onOrderCr
               <Button
                 type="button"
                 onClick={next}
-                disabled={submitting || unavailableItems.length > 0 || (step === 1 && !selectedPayment) || (step === 3 && !receiptImage)}
+                disabled={submitting || compressing || paymentsPending || unavailableItems.length > 0 || !selectedPayment || (step === 3 && requiresReceipt(selectedPayment) && !receiptImage)}
                 className="flex-1 gap-2"
                 style={{
                   backgroundColor: 'var(--store-primary)',

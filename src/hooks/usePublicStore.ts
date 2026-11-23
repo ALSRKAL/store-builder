@@ -1,102 +1,67 @@
-/**
- * usePublicStore - Type-safe hook for public store data
- * Uses TanStack Query v5 with Zod validation
- */
-
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { api } from '../services/api';
+/** Public storefront queries share authoritative, abortable resource reads. */
+import { useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 import { queryKeys } from '../lib/queryClient';
-import type { Store, Product, Category, PaymentMethod } from '../schemas';
+import { storeSchema, productSchema, categorySchema, paymentMethodListSchema,
+  type Store, type Product, type Category, type PaymentMethod } from '../schemas';
+import { readPublicResource } from './realtime/publicResource';
 
-/**
- * Hook to fetch public store data by slug
- */
+const publicQueryOptions = {
+  // Revisions drive updates while visible; mount/refocus is recovery, never a timer.
+  staleTime: Infinity,
+  refetchOnMount: 'always' as const,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+  retry: 1,
+};
+
 export function usePublicStore(slug: string | undefined) {
   return useQuery<Store, Error>({
+    ...publicQueryOptions,
     queryKey: queryKeys.store.bySlug(slug ?? ''),
-    queryFn: () => {
-      if (!slug) throw new Error('Store slug is required');
-      return api.public.getStore(slug);
-    },
+    queryFn: ({ signal }) => readPublicResource(slug!, 'store', storeSchema, signal),
     enabled: Boolean(slug),
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-    placeholderData: keepPreviousData,
   });
 }
 
-/**
- * Hook to fetch public store products
- */
 export function usePublicProducts(slug: string | undefined) {
   return useQuery<Product[], Error>({
+    ...publicQueryOptions,
     queryKey: queryKeys.store.products(slug ?? ''),
-    queryFn: () => {
-      if (!slug) throw new Error('Store slug is required');
-      return api.public.getProducts(slug);
-    },
+    queryFn: ({ signal }) => readPublicResource(slug!, 'products', z.array(productSchema), signal),
     enabled: Boolean(slug),
-    staleTime: 2 * 60 * 1000,
-    retry: 1,
-    placeholderData: keepPreviousData,
   });
 }
 
-/**
- * Hook to fetch public store categories
- */
 export function usePublicCategories(slug: string | undefined) {
   return useQuery<Category[], Error>({
+    ...publicQueryOptions,
     queryKey: queryKeys.store.categories(slug ?? ''),
-    queryFn: () => {
-      if (!slug) throw new Error('Store slug is required');
-      return api.public.getCategories(slug);
-    },
+    queryFn: ({ signal }) => readPublicResource(slug!, 'categories', z.array(categorySchema), signal),
     enabled: Boolean(slug),
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
   });
 }
 
-/**
- * Hook to fetch public store payment methods
- */
-export function usePublicPaymentMethods(slug: string | undefined) {
+export function usePublicPaymentMethods(slug: string | undefined, enabled = true) {
   return useQuery<PaymentMethod[], Error>({
+    ...publicQueryOptions,
     queryKey: queryKeys.store.paymentMethods(slug ?? ''),
-    queryFn: () => {
-      if (!slug) throw new Error('Store slug is required');
-      return api.publicPayments.getByStore(slug);
-    },
-    enabled: Boolean(slug),
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
+    queryFn: ({ signal }) => readPublicResource(slug!, 'payments', paymentMethodListSchema, signal),
+    enabled: Boolean(slug) && enabled,
   });
 }
 
-/**
- * Combined hook for all public store data
- */
 export function usePublicStoreData(slug: string | undefined) {
   const storeQuery = usePublicStore(slug);
   const productsQuery = usePublicProducts(slug);
   const categoriesQuery = usePublicCategories(slug);
-
-  const isLoading = storeQuery.isLoading || productsQuery.isLoading || categoriesQuery.isLoading;
-  const isError = storeQuery.isError || productsQuery.isError || categoriesQuery.isError;
-  const error = storeQuery.error ?? productsQuery.error ?? categoriesQuery.error;
-
   return {
     store: storeQuery.data,
     products: productsQuery.data ?? [],
     categories: categoriesQuery.data ?? [],
-    isLoading,
-    isError,
-    error,
-    refetch: () => {
-      void storeQuery.refetch();
-      void productsQuery.refetch();
-      void categoriesQuery.refetch();
-    },
+    isLoading: storeQuery.isLoading || productsQuery.isLoading || categoriesQuery.isLoading,
+    isError: storeQuery.isError || productsQuery.isError || categoriesQuery.isError,
+    error: storeQuery.error ?? productsQuery.error ?? categoriesQuery.error,
+    refetch: () => Promise.all([storeQuery.refetch(), productsQuery.refetch(), categoriesQuery.refetch()]),
   };
 }

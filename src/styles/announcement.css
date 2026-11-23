@@ -1,0 +1,105 @@
+.announcement-layout {
+  position: relative;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 500;
+  background: inherit;
+}
+
+.announcement-layout-static {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding: 10px 16px;
+}
+
+.announcement-layout-static.announcement-has-close {
+  padding-inline-end: 56px;
+}
+
+.announcement-static {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.announcement-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.announcement-layout-moving .announcement-icon {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  z-index: 1;
+  width: 40px;
+  height: 44px;
+  background: inherit;
+}
+
+.announcement-viewport {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  min-height: 44px;
+}
+
+.announcement-track {
+  width: max-content;
+  max-width: none;
+  padding-block: 12px;
+  white-space: nowrap;
+  line-height: 20px;
+  visibility: hidden;
+  transform: translateX(var(--announcement-start, 100vw));
+}
+
+.announcement-track[data-ready="true"] {
+  visibility: visible;
+  animation: announcement-scroll var(--announcement-duration) linear infinite;
+}
+
+.announcement-bar:hover .announcement-track,
+.announcement-bar:focus-within .announcement-track {
+  animation-play-state: paused;
+}
+
+.announcement-viewport:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -3px;
+}
+
+.announcement-has-close > button {
+  z-index: 1;
+  background: inherit;
+}
+
+@keyframes announcement-scroll {
+  from { transform: translateX(var(--announcement-start)); }
+  to { transform: translateX(var(--announcement-end)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-track,
+  .announcement-track[data-ready="true"] {
+    animation: none;
+    visibility: visible;
+    transform: none;
+    width: auto;
+    padding-inline: 44px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+
+  .announcement-has-close .announcement-track {
+    padding-inline-end: 56px;
+  }
+}

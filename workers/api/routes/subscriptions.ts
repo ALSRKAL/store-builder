@@ -5,6 +5,7 @@
 import type { Env, AuthenticatedRequest, FirebaseUser } from '../types';
 import { jsonResponse, errorResponse, parseBody, generateSubscriptionCode, now, calculateEndDate } from '../utils/helpers';
 import { getUserId } from '../utils/auth';
+import { claimTrial, isActiveTrial, type TrialAdmin } from '../utils/trial';
 
 interface SubscriptionCode {
   code: string;
@@ -13,16 +14,6 @@ interface SubscriptionCode {
   used: number;
   used_by: string | null;
   expires_at: string | null;
-}
-
-interface Admin {
-  id: string;
-  email: string;
-  subscription_end: string | null;
-  subscription_code: string | null;
-  code_history: string | null;
-  is_trial: number;
-  trial_used: number;
 }
 
 export async function handleSubscriptions(
@@ -118,29 +109,21 @@ async function verifyCode(
     const endDate = calculateEndDate(codeDoc.months || 12);
     const planId = codeDoc.plan_id || (codeDoc.months === 1 ? 'monthly' : codeDoc.months <= 6 ? 'semiAnnual' : 'annual');
 
-    const existingAdmin = await env.DB.prepare(`
-      SELECT id FROM admins WHERE id = ?
-    `).bind(userId).first<{ id: string }>();
-
-    if (existingAdmin) {
-      await env.DB.prepare(`
-        UPDATE admins SET 
-          subscription_code = ?,
-          subscription_start = ?,
-          subscription_end = ?,
-          subscription_months = ?,
-          plan_id = ?,
-          is_trial = 0,
-          last_login = ?,
-          updated_at = ?
-        WHERE id = ?
-      `).bind(formattedCode, timestamp, endDate, codeDoc.months || 12, planId, timestamp, timestamp, userId).run();
-    } else {
-      await env.DB.prepare(`
-        INSERT INTO admins (id, email, subscription_code, subscription_start, subscription_end, subscription_months, plan_id, is_trial, last_login, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-      `).bind(userId, user.email, formattedCode, timestamp, endDate, codeDoc.months || 12, planId, timestamp, timestamp, timestamp).run();
-    }
+    // UPSERT handles a trial creating the profile after the code lookup.
+    // Paid activation must win rather than fail on that concurrent insert.
+    await env.DB.prepare(`
+      INSERT INTO admins (id, email, subscription_code, subscription_start, subscription_end,
+        subscription_months, plan_id, is_trial, last_login, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        subscription_code = excluded.subscription_code,
+        subscription_start = excluded.subscription_start,
+        subscription_end = excluded.subscription_end,
+        subscription_months = excluded.subscription_months,
+        plan_id = excluded.plan_id, is_trial = 0,
+        last_login = excluded.last_login, updated_at = excluded.updated_at
+    `).bind(userId, user.email ?? '', formattedCode, timestamp, endDate,
+      codeDoc.months || 12, planId, timestamp, timestamp, timestamp).run();
 
     await env.DB.prepare(`
       UPDATE subscription_codes SET used = 1, used_by = ?, used_by_email = ?, used_at = ?
@@ -162,73 +145,24 @@ async function verifyCode(
 
 async function startTrial(env: Env, userId: string, user: FirebaseUser): Promise<Response> {
   try {
+    const email = user.email?.trim().toLowerCase();
+    if (!email) return errorResponse('Email is required to start a trial', 400);
     const timestamp = now();
-    
-    const existingAdmin = await env.DB.prepare(`
-      SELECT id, email, is_trial, subscription_end, trial_used FROM admins WHERE id = ?
-    `).bind(userId).first<Admin>();
+    const endDate = new Date(Date.parse(timestamp) + 7 * 24 * 60 * 60 * 1000).toISOString();
+    await claimTrial(env, userId, email, timestamp, endDate);
 
-    const existingByEmail = await env.DB.prepare(`
-      SELECT id, email, is_trial, subscription_end, trial_used FROM admins WHERE email = ?
-    `).bind(user.email).first<Admin>();
-
-    const existing = existingAdmin || existingByEmail;
-
-    if (existing?.trial_used === 1) {
-      return errorResponse('لقد استخدمت الفترة التجريبية من قبل. يرجى إدخال كود اشتراك للمتابعة.', 400);
+    // Read the winning state, not the requested end date. Retrying an active
+    // trial is idempotent; paid activation always wins in either execution order.
+    const admin = await env.DB.prepare('SELECT * FROM admins WHERE id = ?')
+      .bind(userId).first<TrialAdmin>();
+    if (isActiveTrial(admin)) {
+      return jsonResponse({ success: true, subscriptionEnd: admin!.subscription_end,
+        planId: 'trial', isTrial: true });
     }
-
-    if (existing?.subscription_end) {
-      const endDate = new Date(existing.subscription_end);
-      if (endDate > new Date()) {
-        return errorResponse('لديك اشتراك نشط بالفعل', 400);
-      }
+    if (admin?.subscription_end && Date.parse(admin.subscription_end) > Date.now()) {
+      return errorResponse('لديك اشتراك نشط بالفعل', 400);
     }
-
-    const trialEnd = new Date();
-    trialEnd.setDate(trialEnd.getDate() + 7);
-    const endDate = trialEnd.toISOString();
-
-    if (existingAdmin) {
-      await env.DB.prepare(`
-        UPDATE admins SET 
-          subscription_start = ?,
-          subscription_end = ?,
-          subscription_months = 0,
-          plan_id = 'trial',
-          is_trial = 1,
-          trial_used = 1,
-          last_login = ?,
-          updated_at = ?
-        WHERE id = ?
-      `).bind(timestamp, endDate, timestamp, timestamp, userId).run();
-    } else if (existingByEmail) {
-      await env.DB.prepare(`
-        UPDATE admins SET 
-          id = ?,
-          subscription_start = ?,
-          subscription_end = ?,
-          subscription_months = 0,
-          plan_id = 'trial',
-          is_trial = 1,
-          trial_used = 1,
-          last_login = ?,
-          updated_at = ?
-        WHERE email = ?
-      `).bind(userId, timestamp, endDate, timestamp, timestamp, user.email).run();
-    } else {
-      await env.DB.prepare(`
-        INSERT INTO admins (id, email, subscription_start, subscription_end, subscription_months, plan_id, is_trial, trial_used, last_login, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 0, 'trial', 1, 1, ?, ?, ?)
-      `).bind(userId, user.email, timestamp, endDate, timestamp, timestamp, timestamp).run();
-    }
-
-    return jsonResponse({
-      success: true,
-      subscriptionEnd: endDate,
-      planId: 'trial',
-      isTrial: true
-    });
+    return errorResponse('لقد استخدمت الفترة التجريبية من قبل. يرجى إدخال كود اشتراك للمتابعة.', 400);
   } catch (error) {
     console.error('Error starting trial:', error);
     return errorResponse('Error starting trial', 500);

@@ -6,8 +6,15 @@
 
 export interface Env {
   DB: D1Database;
-  STORE_IMAGES: R2Bucket;
+  STORE_REALTIME: DurableObjectNamespace;
+  R2_BUCKET: R2Bucket;
+  STORE_IMAGES?: R2Bucket;
+  R2_PUBLIC_URL?: string;
+  RELEASE_ID?: string;
   FIREBASE_PROJECT_ID?: string;
+  FCM_PROJECT_ID?: string;
+  FCM_CLIENT_EMAIL?: string;
+  FCM_PRIVATE_KEY?: string;
   LOG_LEVEL?: string;
 }
 

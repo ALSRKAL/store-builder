@@ -1,15 +1,8 @@
-/**
- * LocationPicker — تحديد موقع المتجر على الخريطة.
- *
- * تحويل من overlay يدوي إلى Radix Dialog، وكل `alert` إلى Toast. أنماط Leaflet
- * انتقلت إلى `styles/leaflet.css` وتُحمَّل مع هذا المكوّن وحده بدل أن تكون في
- * الحزمة الأساسية لكل زائر.
- */
-
 import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, MapPin, Navigation, Search } from 'lucide-react';
-import { Button, Dialog, DialogContent, Input, Label, Textarea, toast } from '../ui';
-import '../../styles/leaflet.css';
+import { Button, Dialog, DialogContent, Input, Label, Textarea } from '../ui';
+import { addMapTiles, loadLeaflet, mapMarker, observeMapSize } from '../../utils/leafletLoader';
+import { isValidCoordinates, normalizeLocation, parseMapLink } from '../../utils/mapLocation';
 
 export interface LocationData {
   lat: number;
@@ -18,13 +11,7 @@ export interface LocationData {
   description?: string;
   enabled?: boolean;
 }
-
-interface SearchResult {
-  lat: string;
-  lon: string;
-  display_name: string;
-}
-
+interface SearchResult { lat: number; lng: number; label: string }
 interface LocationPickerProps {
   currentLocation?: LocationData | null | undefined;
   onSave: (location: LocationData) => void | Promise<void>;
@@ -32,294 +19,191 @@ interface LocationPickerProps {
 }
 
 export default function LocationPicker({ currentLocation, onSave, onClose }: LocationPickerProps): React.JSX.Element {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<ReturnType<NonNullable<Window['L']>['map']> | null>(null);
-  const markerInstance = useRef<ReturnType<NonNullable<Window['L']>['marker']> | null>(null);
-  const [position, setPosition] = useState({ lat: currentLocation?.lat ?? 24.7136, lng: currentLocation?.lng ?? 46.6753 });
-  const [address, setAddress] = useState(currentLocation?.address ?? '');
-  const [description, setDescription] = useState(currentLocation?.description ?? '');
-  const [gpsLoading, setGpsLoading] = useState(false);
+  const [initial] = useState(() => normalizeLocation(currentLocation));
+  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(initial);
+  const positionRef = useRef(position);
+  const [address, setAddress] = useState(initial?.address ?? '');
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [latitude, setLatitude] = useState(initial ? String(initial.lat) : '');
+  const [longitude, setLongitude] = useState(initial ? String(initial.lng) : '');
+  const [mapLink, setMapLink] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
+  const [mapState, setMapState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<ReturnType<NonNullable<Window['L']>['map']> | null>(null);
+  const markerInstance = useRef<ReturnType<NonNullable<Window['L']>['marker']> | null>(null);
+  const searchRequest = useRef<AbortController | null>(null);
+  const alive = useRef(true);
+  const gpsGeneration = useRef(0);
 
-  const reverseGeocode = async (lat: number, lng: number): Promise<void> => {
-    try {
-      // Photon API عام ويدعم CORS؛ لا نعتمد على /api/geocode غير الموجود
-      // في الـWorker (كان يعيد 404 في الإنتاج ويُفقد العنوان).
-      const response = await fetch(
-        `https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}&lang=ar`,
-      );
-      const data: {
-        features?: Array<{
-          properties: { name?: string; street?: string; city?: string; state?: string; country?: string };
-        }>;
-      } = await response.json();
-      const properties = data.features?.[0]?.properties;
-      const label = properties
-        ? [properties.name, properties.street, properties.city, properties.state, properties.country]
-            .filter(Boolean)
-            .join('، ')
-        : '';
-      setAddress(label || `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    } catch {
-      setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+  const choosePosition = (lat: number, lng: number): void => {
+    if (!isValidCoordinates(lat, lng)) return;
+    const next = { lat, lng };
+    positionRef.current = next;
+    setPosition(next);
+    setLatitude(String(lat));
+    setLongitude(String(lng));
+    setError(null);
+    markerInstance.current?.setLatLng([lat, lng]);
+    const L = window.L;
+    if (!markerInstance.current && L && mapInstance.current) {
+      const marker = L.marker([lat, lng], { draggable: true, icon: mapMarker(L) }).addTo(mapInstance.current);
+      marker.on('dragend', (event) => { const point = event.target.getLatLng(); choosePosition(point.lat, point.lng); });
+      markerInstance.current = marker;
     }
   };
+  const chooseRef = useRef(choosePosition);
+  useEffect(() => { chooseRef.current = choosePosition; });
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      gpsGeneration.current += 1;
+      searchRequest.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-
-    const init = (): void => {
-      const L = window.L;
-      if (cancelled || !mapRef.current || mapInstance.current || !L) return;
-      const map = L.map(mapRef.current).setView([position.lat, position.lng], 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-      const icon = L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:#ef4444;filter:drop-shadow(0 3px 4px rgba(0,0,0,0.3))"><svg viewBox="0 0 24 24" fill="#ef4444" stroke="#fff" stroke-width="1" style="width:100%;height:100%"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>`,
-        iconSize: [40, 40],
-        iconAnchor: [20, 40],
-      });
-      const marker = L.marker([position.lat, position.lng], { draggable: true, icon }).addTo(map);
-      marker.on('dragend', (event) => {
-        const next = event.target.getLatLng();
-        setPosition({ lat: next.lat, lng: next.lng });
-        void reverseGeocode(next.lat, next.lng);
-      });
-      map.on('click', (event) => {
-        marker.setLatLng([event.latlng.lat, event.latlng.lng]);
-        setPosition({ lat: event.latlng.lat, lng: event.latlng.lng });
-        void reverseGeocode(event.latlng.lat, event.latlng.lng);
-      });
+    let disposeSize = (): void => {};
+    let disposeTiles = (): void => {};
+    setMapState('loading');
+    void loadLeaflet().then((L) => {
+      if (cancelled || !mapRef.current) return;
+      const point = positionRef.current ?? { lat: 15.3694, lng: 44.1910 };
+      const map = L.map(mapRef.current).setView([point.lat, point.lng], positionRef.current ? 15 : 5);
       mapInstance.current = map;
-      markerInstance.current = marker;
-      setMapReady(true);
-      window.setTimeout(() => map.invalidateSize(), 250);
-      if (currentLocation) void reverseGeocode(currentLocation.lat, currentLocation.lng);
-    };
-
-    const load = (): void => {
-      if (window.L) {
-        init();
-        return;
-      }
-      const existing = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
-      if (existing) {
-        existing.addEventListener('load', init, { once: true });
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
-      script.crossOrigin = '';
-      script.dataset['leaflet'] = 'true';
-      script.addEventListener('load', init, { once: true });
-      document.head.appendChild(script);
-    };
-
-    // ننتظر انتهاء حركة الـDialog قبل قياس الخريطة
-    const timer = window.setTimeout(load, 120);
+      disposeTiles = addMapTiles(L, map, () => { if (!cancelled) setMapState('ready'); }, () => { if (!cancelled) setMapState('error'); });
+      if (positionRef.current) chooseRef.current(point.lat, point.lng);
+      map.on('click', (event) => chooseRef.current(event.latlng.lat, event.latlng.lng));
+      disposeSize = observeMapSize(map, mapRef.current);
+    }).catch(() => { if (!cancelled) setMapState('error'); });
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      disposeSize();
+      disposeTiles();
       mapInstance.current?.remove();
       mapInstance.current = null;
       markerInstance.current = null;
     };
-    // position/currentLocation يُقرآن مرة واحدة عند الفتح
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
 
   const useCurrentLocation = (): void => {
-    if (!navigator.geolocation) {
-      toast.error('المتصفح لا يدعم تحديد الموقع');
-      return;
-    }
+    if (!navigator.geolocation) { setError('المتصفح لا يدعم تحديد الموقع. أدخل الإحداثيات أو رابط الخريطة.'); return; }
+    const generation = ++gpsGeneration.current;
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (result) => {
-        const { latitude, longitude } = result.coords;
-        setPosition({ lat: latitude, lng: longitude });
-        mapInstance.current?.setView([latitude, longitude], 17);
-        markerInstance.current?.setLatLng([latitude, longitude]);
-        void reverseGeocode(latitude, longitude);
-        setGpsLoading(false);
-      },
-      (error) => {
-        const message =
-          error.code === 1
-            ? 'تم رفض إذن الموقع. اسمح بالوصول من إعدادات المتصفح.'
-            : error.code === 2
-              ? 'الموقع غير متاح حالياً.'
-              : 'انتهت مهلة تحديد الموقع. حاول مرة أخرى.';
-        toast.error('تعذّر تحديد موقعك', message);
-        setGpsLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 },
-    );
+    setError(null);
+    navigator.geolocation.getCurrentPosition((result) => {
+      if (!alive.current || generation !== gpsGeneration.current) return;
+      choosePosition(result.coords.latitude, result.coords.longitude);
+      mapInstance.current?.setView([result.coords.latitude, result.coords.longitude], 17);
+      setGpsLoading(false);
+    }, (failure) => {
+      if (!alive.current || generation !== gpsGeneration.current) return;
+      setError(failure.code === 1 ? 'تم رفض إذن الموقع. اسمح بالوصول من إعدادات المتصفح أو أدخل الموقع يدوياً.' : 'تعذّر تحديد موقعك. أعد المحاولة أو أدخل الموقع يدوياً.');
+      setGpsLoading(false);
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
   };
 
   const search = async (): Promise<void> => {
     if (!searchQuery.trim()) return;
+    searchRequest.current?.abort();
+    const request = new AbortController();
+    searchRequest.current = request;
     setSearching(true);
+    setSearchMessage(null);
+    const timer = window.setTimeout(() => request.abort(), 12000);
     try {
-      const response = await fetch(
-        `https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&lang=ar&limit=5`,
-      );
-      const data: {
-        features: Array<{
-          geometry: { coordinates: [number, number] };
-          properties: { name?: string; street?: string; city?: string; state?: string; country?: string };
-        }>;
-      } = await response.json();
-      setResults(
-        data.features.map((feature) => ({
-          lat: String(feature.geometry.coordinates[1]),
-          lon: String(feature.geometry.coordinates[0]),
-          display_name: [feature.properties.name, feature.properties.street, feature.properties.city, feature.properties.state, feature.properties.country]
-            .filter(Boolean)
-            .join('، '),
-        })),
-      );
+      // Only this fixed public endpoint is fetched, never a customer-pasted URL.
+      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery.trim())}&limit=5`, { signal: request.signal });
+      if (!response.ok) throw new Error('search');
+      const data = await response.json() as { features?: Array<{ geometry?: { coordinates?: number[] }; properties?: Record<string, unknown> }> };
+      const matches = (data.features ?? []).flatMap((feature) => {
+        const [lng, lat] = feature.geometry?.coordinates ?? [];
+        if (!isValidCoordinates(lat, lng)) return [];
+        const props = feature.properties ?? {};
+        const label = ['name', 'street', 'city', 'state', 'country'].map((key) => props[key]).filter((value) => typeof value === 'string').join('، ');
+        return [{ lat, lng: lng as number, label: label || `${lat}, ${lng}` }];
+      });
+      if (!alive.current || searchRequest.current !== request) return;
+      setResults(matches);
+      if (!matches.length) setSearchMessage('لا توجد نتائج. جرّب اسماً آخر أو أدخل رابط الخريطة.');
     } catch {
-      toast.error('تعذّر البحث', 'جرّب تحريك الخريطة يدوياً لتحديد الموقع.');
-      setResults([]);
+      if (alive.current && searchRequest.current === request) {
+        setResults([]);
+        setSearchMessage('تعذّر البحث. أعد المحاولة أو أدخل الإحداثيات / رابط الخريطة.');
+      }
     } finally {
-      setSearching(false);
+      window.clearTimeout(timer);
+      if (alive.current && searchRequest.current === request) setSearching(false);
     }
   };
 
-  const selectResult = (result: SearchResult): void => {
-    const lat = Number.parseFloat(result.lat);
-    const lng = Number.parseFloat(result.lon);
-    setPosition({ lat, lng });
-    setAddress(result.display_name);
-    setResults([]);
-    setSearchQuery('');
-    mapInstance.current?.setView([lat, lng], 17);
-    markerInstance.current?.setLatLng([lat, lng]);
+  const save = async (): Promise<void> => {
+    if (saveLock.current) return;
+    const point = latitude.trim() && longitude.trim() ? parseMapLink(`${latitude},${longitude}`) : null;
+    if (!point) { setError('حدد الموقع أولاً. خط العرض بين -90 و90 وخط الطول بين -180 و180.'); return; }
+    saveLock.current = true;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ ...currentLocation, ...point, address: address.trim(), description: description.trim(), enabled: currentLocation?.enabled ?? true });
+    } catch {
+      if (alive.current) setError('تعذّر حفظ الموقع. بياناتك محفوظة؛ أعد المحاولة.');
+    } finally {
+      saveLock.current = false;
+      if (alive.current) setSaving(false);
+    }
   };
 
   return (
-    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent size="md" title="تحديد موقع المتجر" description="زِد ثقة عملائك بإظهار مكان متجرك على الخريطة.">
+    <Dialog open onOpenChange={(open) => { if (!open && !saveLock.current) onClose(); }}>
+      <DialogContent size="md" title="تحديد موقع المتجر" description="اختر نقطة على الخريطة أو أدخل إحداثيات / رابطاً مباشراً." onEscapeKeyDown={(event) => { if (saving) event.preventDefault(); }} onPointerDownOutside={(event) => { if (saving) event.preventDefault(); }}>
         <div className="flex flex-col gap-3 p-4">
-          <div className="relative">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-ring/25">
-              <Search className="size-4 shrink-0 text-fg-subtle" aria-hidden />
-              <Label htmlFor="location-search" className="sr-only">ابحث عن موقع</Label>
-              <Input
-                id="location-search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void search();
-                  }
-                }}
-                placeholder="ابحث عن حي أو مدينة…"
-                className="border-0 bg-transparent px-0 focus-visible:ring-0"
-              />
-              <Button type="button" size="sm" variant="ghost" onClick={() => void search()} disabled={searching || !searchQuery.trim()}>
-                {searching ? <Loader2 className="size-4 animate-spin" aria-hidden /> : 'بحث'}
-              </Button>
-            </div>
-            {results.length > 0 ? (
-              <ul className="absolute inset-x-0 top-full z-10 mt-1.5 max-h-48 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-overlay">
-                {results.map((result, index) => (
-                  <li key={`${result.lat}-${index}`}>
-                    <button
-                      type="button"
-                      onClick={() => selectResult(result)}
-                      className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-start text-label text-foreground hover:bg-muted"
-                    >
-                      <MapPin className="mt-0.5 size-3.5 shrink-0 text-fg-muted" aria-hidden />
-                      {result.display_name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+          <div className="flex items-center gap-2">
+            <Search className="size-4 shrink-0 text-fg-subtle" aria-hidden />
+            <Label htmlFor="location-search" className="sr-only">ابحث عن موقع</Label>
+            <Input id="location-search" value={searchQuery} onChange={(event) => { searchRequest.current?.abort(); searchRequest.current = null; setSearching(false); setSearchMessage(null); setResults([]); setSearchQuery(event.target.value); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void search(); } }} placeholder="ابحث عن حي أو مدينة…" />
+            <Button type="button" size="sm" variant="outline" onClick={() => void search()} disabled={searching || !searchQuery.trim()}>{searching ? <Loader2 className="size-4 animate-spin" aria-label="جاري البحث" /> : 'بحث'}</Button>
           </div>
-
-          <div className="relative h-[260px] overflow-hidden rounded-md border border-border bg-muted">
-            <div ref={mapRef} className="size-full" />
-            {!mapReady ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-fg-muted">
-                <Loader2 className="size-5 animate-spin" aria-hidden />
-                <span className="text-label">جاري تحميل الخريطة…</span>
-              </div>
-            ) : null}
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="تحديد موقعي الحالي"
-              className="absolute bottom-3 start-3 bg-card"
-              onClick={useCurrentLocation}
-              disabled={gpsLoading}
-            >
-              {gpsLoading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Navigation className="size-4" aria-hidden />}
-            </Button>
+          {searchMessage ? <p role="status" className="text-label text-fg-muted">{searchMessage}</p> : null}
+          {results.length ? <ul className="max-h-40 overflow-y-auto rounded-md border border-border bg-card">{results.map((result, index) => <li key={index}><button type="button" className="flex min-h-11 w-full items-start gap-2 p-3 text-start text-label hover:bg-muted" onClick={() => { choosePosition(result.lat, result.lng); setAddress(result.label); setResults([]); mapInstance.current?.setView([result.lat, result.lng], 17); }}><MapPin className="size-4 shrink-0" aria-hidden />{result.label}</button></li>)}</ul> : null}
+          <div className="relative h-[240px] overflow-hidden rounded-md border border-border bg-muted sm:h-[280px]">
+            <div ref={mapRef} className="size-full" aria-label="خريطة اختيار الموقع" />
+            {mapState !== 'ready' ? <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center gap-2 bg-surface-sunken p-5 text-center text-label text-fg-muted" role="status">
+              {mapState === 'loading' ? <><Loader2 className="size-5 animate-spin" aria-hidden /><span>جاري تحميل الخريطة…</span></> : <><p>تعذّر تحميل الخريطة. يمكنك إدخال الموقع يدوياً أدناه.</p><Button type="button" size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>إعادة تحميل الخريطة</Button></>}
+            </div> : null}
           </div>
-
-          {address ? (
-            <div className="flex items-start gap-2 border-s-2 border-success ps-3 text-success">
-              <MapPin className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} aria-hidden />
-              <p className="text-label leading-relaxed">{address}</p>
-            </div>
-          ) : null}
-
+          <p className="text-label text-fg-muted">{position ? 'الموقع محدد. اسحب العلامة أو عدّل الإحداثيات أدناه.' : 'لم يُحدد موقع بعد. اختر نقطة أو استخدم رابطاً / إحداثيات.'}</p>
+          <Button type="button" variant="outline" className="self-start gap-2" onClick={useCurrentLocation} disabled={gpsLoading || saving}>{gpsLoading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Navigation className="size-4" aria-hidden />}تحديد موقعي الحالي</Button>
           <div>
-            <Label htmlFor="location-description" className="mb-1.5 block">وصف الموقع (اختياري)</Label>
-            <Textarea
-              id="location-description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="مثال: بجوار مسجد الراشد، الدور الثاني، محل رقم 5…"
-              rows={2}
-              maxLength={200}
-              className="resize-none"
-            />
-            <p className="mt-1 text-end text-[11px] text-fg-subtle" dir="ltr">{description.length}/200</p>
+            <Label htmlFor="location-link" className="mb-1.5 block">رابط الخريطة أو الإحداثيات</Label>
+            <div className="flex flex-col gap-2 sm:flex-row"><Input id="location-link" value={mapLink} onChange={(event) => setMapLink(event.target.value)} placeholder="https://www.google.com/maps…" dir="ltr" /><Button type="button" variant="outline" onClick={() => {
+              const point = parseMapLink(mapLink);
+              if (!point) { setError('الرابط غير مدعوم أو لا يحتوي إحداثيات. استخدم رابط Google Maps مباشراً، OpenStreetMap أو خط العرض، خط الطول. الروابط المختصرة لا تُفتح تلقائياً.'); return; }
+              choosePosition(point.lat, point.lng); mapInstance.current?.setView([point.lat, point.lng], 16);
+            }}>استخدام الموقع</Button></div>
           </div>
-
-          <p className="text-center text-[11px] text-fg-subtle" data-numeric dir="ltr">
-            {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
-          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label htmlFor="location-lat" className="mb-1.5 block">خط العرض</Label><Input id="location-lat" value={latitude} onChange={(event) => setLatitude(event.target.value)} inputMode="decimal" dir="ltr" placeholder="-90 … 90" /></div>
+            <div><Label htmlFor="location-lng" className="mb-1.5 block">خط الطول</Label><Input id="location-lng" value={longitude} onChange={(event) => setLongitude(event.target.value)} inputMode="decimal" dir="ltr" placeholder="-180 … 180" /></div>
+          </div>
+          <div><Label htmlFor="location-address" className="mb-1.5 block">العنوان (اختياري)</Label><Input id="location-address" value={address} onChange={(event) => setAddress(event.target.value)} maxLength={500} placeholder="المدينة، الحي، الشارع" /></div>
+          <div><Label htmlFor="location-description" className="mb-1.5 block">وصف الموقع (اختياري)</Label><Textarea id="location-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="مثال: بجوار المسجد، الدور الثاني…" rows={2} maxLength={200} /><p className="mt-1 text-end text-[11px] text-fg-subtle" dir="ltr">{description.length}/200</p></div>
+          {error ? <p role="alert" className="rounded-md border border-danger/25 bg-danger/5 p-3 text-label text-danger">{error}</p> : null}
         </div>
-
         <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-border bg-card px-4 py-3 sm:flex-row">
-          <Button type="button" variant="outline" onClick={onClose} className="sm:w-28">
-            إلغاء
-          </Button>
-          <Button
-            type="button"
-            className="flex-1 gap-2"
-            disabled={saving}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await onSave({
-                  lat: position.lat,
-                  lng: position.lng,
-                  address,
-                  description: description.trim(),
-                });
-              } catch {
-                // الـContext يعرض Toast بالفعل؛ نُبقي النافذة مفتوحة للمحاولة.
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
-            {saving ? 'جاري الحفظ…' : 'حفظ الموقع'}
-          </Button>
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving} className="sm:w-28">إلغاء</Button>
+          <Button type="button" className="flex-1 gap-2" disabled={saving} onClick={() => void save()}>{saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}{saving ? 'جاري الحفظ…' : 'حفظ الموقع'}</Button>
         </div>
       </DialogContent>
     </Dialog>

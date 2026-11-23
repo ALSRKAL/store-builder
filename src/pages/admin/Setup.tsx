@@ -54,7 +54,7 @@ function Setup(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { user, adminData, createAdminProfile, refreshAdminData } = useAuth();
+  const { user, adminData, createAdminProfile } = useAuth();
   const navigate = useNavigate();
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -149,9 +149,7 @@ function Setup(): React.JSX.Element {
       };
 
       await createAdminProfile(adminProfileData);
-      // نحدّث الملف من الخادم قبل التوجيه حتى لا تفقد حالة الاشتراك/التجربة
-      // التي كانت في الذاكرة عند استبدال adminData بالبيانات المُرسلة.
-      await refreshAdminData();
+      // createAdminProfile adopts the complete API response, including subscription.
       navigate('/admin/success', { replace: true });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '';

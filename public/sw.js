@@ -100,7 +100,7 @@ async function networkFirst(request) {
       cache.put(request, response.clone()).catch(() => {});
     }
     return response;
-  } catch (error) {
+  } catch {
     const cached = await caches.match(request);
     return cached || new Response('Offline', { status: 503 });
   }
@@ -118,7 +118,7 @@ async function cacheFirst(request, cacheName) {
       cache.put(request, response.clone()).catch(() => {});
     }
     return response;
-  } catch (error) {
+  } catch {
     return new Response('', { status: 503 });
   }
 }
@@ -161,7 +161,7 @@ self.addEventListener('push', (event) => {
   
   try {
     if (event.data) data = { ...data, ...event.data.json() };
-  } catch (e) {}
+  } catch { /* Keep the fallback notification for malformed push payloads. */ }
 
   event.waitUntil(
     self.registration.showNotification(data.title, {

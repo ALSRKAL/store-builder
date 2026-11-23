@@ -1,7 +1,7 @@
 # Cloudflare Workers Configuration - Optimized for Performance
 name = "store-api"
 main = "api/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-12-23"
 compatibility_flags = ["nodejs_compat"]
 
 # ===== Performance Settings =====
@@ -13,6 +13,15 @@ workers_dev = true
 binding = "DB"
 database_name = "store-db"
 database_id = "1cad1509-9ec3-47d9-9e19-6f4a72038198"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "STORE_REALTIME"
+class_name = "StoreRealtime"
+
+[[migrations]]
+tag = "store-realtime-v1"
+new_sqlite_classes = ["StoreRealtime"]
 
 # ===== R2 Storage =====
 [[r2_buckets]]

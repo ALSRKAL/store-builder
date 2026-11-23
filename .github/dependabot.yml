@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+    open-pull-requests-limit: 5
+    groups:
+      development-patch-minor:
+        dependency-type: development
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /workers
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:30'
+    open-pull-requests-limit: 3
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+    open-pull-requests-limit: 3
+# Updates remain reviewable pull requests; no auto-merge or security exceptions.

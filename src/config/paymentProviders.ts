@@ -542,7 +542,7 @@ export function getProvidersByCountry(countryCode: string): PaymentProvider[] {
  */
 export function getProviderById(providerId: string | null | undefined): PaymentProvider | null {
   if (!providerId) return null;
-  return PAYMENT_PROVIDERS[providerId] ?? null;
+  return Object.prototype.hasOwnProperty.call(PAYMENT_PROVIDERS, providerId) ? PAYMENT_PROVIDERS[providerId] ?? null : null;
 }
 
 /**
@@ -550,6 +550,27 @@ export function getProviderById(providerId: string | null | undefined): PaymentP
  */
 export function getCountryByCode(code: string): Country | null {
   return SUPPORTED_COUNTRIES.find((c) => c.code === code) ?? null;
+}
+
+/** Prefer the stored country, especially for providers available in every country. */
+export function getProviderCountry(provider: PaymentProvider, countryCode?: string | null): Country | null {
+  const stored = countryCode ? getCountryByCode(countryCode) : null;
+  if (stored && (provider.countries.includes('*') || provider.countries.includes(stored.code))) return stored;
+  return SUPPORTED_COUNTRIES.find((country) => provider.countries.includes(country.code)) ?? null;
+}
+
+export function providerRequiresReceipt(method: {
+  providerId?: string | null;
+  provider?: string | null;
+  requireReceipt?: boolean;
+  requiresReceipt?: boolean;
+} | null): boolean {
+  if (!method || getProviderById(method.providerId ?? method.provider)?.type === 'cod') return false;
+  return method.requireReceipt ?? method.requiresReceipt ?? false;
+}
+
+export function providerFieldValue(provider: PaymentProvider | null, key: string, value: string): string {
+  return provider?.fields.find((field) => field.key === key)?.options?.find((option) => option.value === value)?.label ?? value;
 }
 
 /**
@@ -567,7 +588,7 @@ export function validateProviderConfig(
   const errors: string[] = [];
 
   for (const field of provider.fields) {
-    const value = config[field.key];
+    const value = config[field.key]?.trim();
 
     // التحقق من الحقول المطلوبة
     if (field.required && (!value || value.trim() === '')) {

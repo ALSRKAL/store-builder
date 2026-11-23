@@ -172,7 +172,7 @@ function Store(): React.JSX.Element {
     const loc = extendedStore?.location;
     const lat = loc?.lat ?? loc?.latitude;
     const lng = loc?.lng ?? loc?.longitude;
-    if (!loc || lat == null || lng == null) return null;
+    if (!loc || lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
     return {
       lat,
       lng,

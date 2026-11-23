@@ -6,6 +6,8 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
+import { getEntitlementRoute } from '../../lib/authEntitlement';
+import ProfileRetry from '../../components/auth/ProfileRetry';
 import { cn } from '../../lib/utils';
 import { Button, Input, Label } from '../../components/ui';
 import AuthShell from '../../components/auth/AuthShell';
@@ -27,6 +29,7 @@ import { PLANS } from '../../config/plans';
 type ErrorType = 'used' | 'invalid' | 'expired' | 'trial-used' | 'active' | 'error' | '';
 
 const translateError = (message: string): string => {
+  if (message === 'PROFILE_REFRESH_FAILED') return 'تم التفعيل، لكن تعذّر تحميل بيانات الحساب. أعد المحاولة للتحقق من حالة الاشتراك.';
   const lowerMsg = message.toLowerCase();
   if (lowerMsg.includes('already used') || lowerMsg.includes('used by another'))
     return 'هذا الرمز مستخدم من قبل حساب آخر';
@@ -57,31 +60,19 @@ function VerifyCode(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [checkingSubscription, setCheckingSubscription] = useState(true);
-  const { user, adminData, logout, refreshAdminData } = useAuth();
+  const { user, adminData, logout, refreshAdminData, entitlement, profileError, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const trialUsed = adminData?.trialUsed === true;
+  const trialUnavailable = !entitlement.canStartTrial;
 
   useEffect(() => {
-    const check = (): void => {
-      if (!user) {
-        setCheckingSubscription(false);
-        return;
-      }
-      if (adminData === undefined) return;
-      if (adminData?.subscriptionEnd) {
-        const end = new Date(adminData.subscriptionEnd);
-        if (end > new Date()) {
-          navigate(adminData?.storeName ? '/admin/dashboard' : '/admin/setup', {
-            replace: true,
-          });
-          return;
-        }
-      }
-      setCheckingSubscription(false);
-    };
-    check();
-  }, [user, adminData, navigate]);
+    if (authLoading) return;
+    if (user && entitlement.active) {
+      navigate(getEntitlementRoute(adminData), { replace: true });
+      return;
+    }
+    setCheckingSubscription(false);
+  }, [user, adminData, entitlement.active, authLoading, navigate]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -101,10 +92,9 @@ function VerifyCode(): React.JSX.Element {
     try {
       const result = await api.subscriptions.verify(formatted);
       if (result.success) {
-        const refreshed = await refreshAdminData?.();
-        navigate(refreshed?.storeName ? '/admin/dashboard' : '/admin/setup', {
-          replace: true,
-        });
+        const refreshed = await refreshAdminData();
+        if (!refreshed) throw new Error('PROFILE_REFRESH_FAILED');
+        navigate(getEntitlementRoute(refreshed), { replace: true });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '';
@@ -116,12 +106,15 @@ function VerifyCode(): React.JSX.Element {
   };
 
   const startTrial = async (): Promise<void> => {
+    if (authLoading || profileError || trialUnavailable || loading || trialLoading) return;
     setTrialLoading(true);
     setError('');
+    setErrorType('');
     try {
       await api.subscriptions.startTrial();
-      const refreshed = await refreshAdminData?.();
-      navigate(refreshed?.storeName ? '/admin/dashboard' : '/admin/setup', { replace: true });
+      const refreshed = await refreshAdminData();
+      if (!refreshed) throw new Error('PROFILE_REFRESH_FAILED');
+      navigate(getEntitlementRoute(refreshed), { replace: true });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'حدث خطأ أثناء بدء الفترة التجريبية';
       setError(translateError(errorMsg));
@@ -137,7 +130,9 @@ function VerifyCode(): React.JSX.Element {
     return <XCircle className="h-4 w-4 shrink-0" aria-hidden />;
   };
 
-  if (checkingSubscription) {
+  if (profileError && !adminData) return <ProfileRetry />;
+
+  if (checkingSubscription || authLoading) {
     return (
       <AuthShell title="جاري التحقق..." subtitle="نتحقق من حالة اشتراكك">
         <div className="flex flex-col items-center gap-3 py-6" role="status" aria-live="polite">
@@ -164,6 +159,14 @@ function VerifyCode(): React.JSX.Element {
       }
     >
       <form onSubmit={(e) => void handleSubmit(e)}>
+        {profileError && (
+          <div className="mb-4 rounded-md border border-warning/25 bg-warning/5 px-3.5 py-2.5 text-label text-warning">
+            <p role="alert">{profileError}</p>
+            <Button type="button" variant="ghost" onClick={() => {
+              void refreshAdminData().catch(() => { /* Retry remains available. */ });
+            }}>إعادة تحميل بيانات الحساب</Button>
+          </div>
+        )}
         {error && (
           <div
             role="alert"
@@ -204,7 +207,7 @@ function VerifyCode(): React.JSX.Element {
           </div>
           <p id="sub-code-hint" className="mt-1.5 text-label text-fg-subtle">ستجد الرمز في رسالة الاشتراك المرسلة إليك</p>
         </div>
-        <Button type="submit" disabled={loading} size="lg" className="mt-2 w-full">
+        <Button type="submit" disabled={loading || trialLoading} size="lg" className="mt-2 w-full">
           {loading ? (
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
           ) : (
@@ -222,10 +225,12 @@ function VerifyCode(): React.JSX.Element {
           <span className="px-3 text-xs text-fg-subtle">أو</span>
           <div className="h-px flex-1 bg-border" />
         </div>
-        {trialUsed ? (
+        {trialUnavailable ? (
           <div role="note" className="flex items-center justify-start gap-2.5 rounded-md border border-warning/25 bg-warning/5 px-5 py-3.5 text-start text-label font-medium text-warning">
             <AlertCircle className="h-5 w-5 shrink-0" aria-hidden />
-            <span>لقد استخدمت الفترة التجريبية من قبل</span>
+            <span>{entitlement.state === 'paid-expired'
+              ? 'انتهى اشتراكك. أدخل رمز اشتراك جديد للمتابعة'
+              : 'لقد استخدمت الفترة التجريبية من قبل'}</span>
           </div>
         ) : (
           <>
@@ -234,7 +239,7 @@ function VerifyCode(): React.JSX.Element {
               variant="outline"
               size="lg"
               onClick={() => void startTrial()}
-              disabled={trialLoading}
+              disabled={trialLoading || loading || !!profileError}
               className="w-full gap-2.5"
             >
               {trialLoading ? (

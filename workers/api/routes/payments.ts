@@ -4,6 +4,16 @@
 
 import type { Env, AuthenticatedRequest } from '../types';
 import { jsonResponse, errorResponse } from '../utils/helpers';
+import { getProviderById, getProviderCountry, validateProviderConfig } from '../../../src/config/paymentProviders';
+
+function configError(providerId: string, config: unknown): string | null {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return 'تفاصيل الإعدادات غير صالحة';
+  if (Object.values(config).some((value) => typeof value !== 'string')) return 'قيم إعدادات الدفع يجب أن تكون نصوصاً';
+  const validation = validateProviderConfig(providerId, config as Record<string, string>);
+  if (!validation.valid) return validation.errors.join('، ');
+  if (getProviderById(providerId)?.type === 'qr' && !(config as Record<string, string>).qrCodeImage) return 'يرجى رفع صورة QR Code';
+  return null;
+}
 
 interface PaymentMethod {
   id: string;
@@ -49,7 +59,7 @@ export async function handlePayments(
     return createPaymentMethod(env, user.uid, body);
   }
 
-  if (method === 'PUT' && path.match(/^\/api\/payments\/[\w-]+$/)) {
+  if (method === 'PUT' && path !== '/api/payments/reorder' && path.match(/^\/api\/payments\/[\w-]+$/)) {
     const paymentId = path.split('/').pop()!;
     const body = await request.json() as PaymentInput;
     return updatePaymentMethod(env, user.uid, paymentId, body);
@@ -93,7 +103,7 @@ async function getPaymentMethods(env: Env, storeId: string): Promise<Response> {
     const formattedMethods = methods.results.map(m => ({
       id: m.id, storeId: m.store_id, providerId: m.provider_id, countryCode: m.country_code,
       label: m.label, configDetails: JSON.parse(m.config_details || '{}'),
-      requireReceipt: m.require_receipt === 1, receiptInstructions: m.receipt_instructions,
+      requireReceipt: getProviderById(m.provider_id)?.type !== 'cod' && m.require_receipt === 1, receiptInstructions: m.receipt_instructions,
       isActive: m.is_active === 1, sortOrder: m.sort_order, createdAt: m.created_at, updatedAt: m.updated_at
     }));
 
@@ -110,8 +120,11 @@ async function createPaymentMethod(env: Env, storeId: string, data: PaymentInput
 
     if (!providerId) return errorResponse('معرف مزود الدفع مطلوب', 400);
     if (!countryCode) return errorResponse('كود الدولة مطلوب', 400);
-    if (!configDetails || typeof configDetails !== 'object') return errorResponse('تفاصيل الإعدادات مطلوبة', 400);
-
+    const provider = getProviderById(providerId);
+    if (!provider || getProviderCountry(provider, countryCode)?.code !== countryCode) return errorResponse('مزود الدفع غير متاح لهذه الدولة', 400);
+    const invalidConfig = configError(providerId, configDetails);
+    if (invalidConfig) return errorResponse(invalidConfig, 400);
+    const receiptRequired = provider.type !== 'cod' && Boolean(requireReceipt);
     const configJson = JSON.stringify(configDetails);
     const maxOrder = await env.DB.prepare(`SELECT MAX(sort_order) as max_order FROM store_payment_methods WHERE store_id = ?`).bind(storeId).first<{ max_order: number | null }>();
     const sortOrder = (maxOrder?.max_order || 0) + 1;
@@ -122,7 +135,7 @@ async function createPaymentMethod(env: Env, storeId: string, data: PaymentInput
     await env.DB.prepare(`
       INSERT INTO store_payment_methods (id, store_id, provider_id, country_code, label, config_details, require_receipt, receipt_instructions, is_active, sort_order, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-    `).bind(id, storeId, providerId, countryCode, label || null, configJson, requireReceipt ? 1 : 0, receiptInstructions || null, sortOrder, timestamp, timestamp).run();
+    `).bind(id, storeId, providerId, countryCode, label || null, configJson, receiptRequired ? 1 : 0, receiptRequired ? receiptInstructions || null : null, sortOrder, timestamp, timestamp).run();
 
     return jsonResponse({ success: true, id, message: 'تم إضافة طريقة الدفع بنجاح' }, 201);
   } catch (error) {
@@ -133,19 +146,27 @@ async function createPaymentMethod(env: Env, storeId: string, data: PaymentInput
 
 async function updatePaymentMethod(env: Env, storeId: string, paymentId: string, data: PaymentInput): Promise<Response> {
   try {
-    const existing = await env.DB.prepare(`SELECT id FROM store_payment_methods WHERE id = ? AND store_id = ?`).bind(paymentId, storeId).first<{ id: string }>();
+    const existing = await env.DB.prepare(`SELECT id, provider_id FROM store_payment_methods WHERE id = ? AND store_id = ?`).bind(paymentId, storeId).first<{ id: string; provider_id: string }>();
     if (!existing) return errorResponse('طريقة الدفع غير موجودة', 404);
+    const isCod = getProviderById(existing.provider_id)?.type === 'cod';
+    if (data.configDetails !== undefined) {
+      const invalidConfig = configError(existing.provider_id, data.configDetails);
+      if (invalidConfig) return errorResponse(invalidConfig, 400);
+    }
 
-    const { label, configDetails, isActive, requireReceipt, receiptInstructions } = data;
+    const { label, configDetails, isActive, requireReceipt, receiptInstructions, countryCode } = data;
+    const provider = getProviderById(existing.provider_id);
+    if (countryCode !== undefined && (!provider || getProviderCountry(provider, countryCode)?.code !== countryCode)) return errorResponse('مزود الدفع غير متاح لهذه الدولة', 400);
     const timestamp = new Date().toISOString();
     const updates: string[] = [];
     const values: unknown[] = [];
 
+    if (countryCode !== undefined) { updates.push('country_code = ?'); values.push(countryCode); }
     if (label !== undefined) { updates.push('label = ?'); values.push(label || null); }
     if (configDetails !== undefined) { updates.push('config_details = ?'); values.push(JSON.stringify(configDetails)); }
     if (isActive !== undefined) { updates.push('is_active = ?'); values.push(isActive ? 1 : 0); }
-    if (requireReceipt !== undefined) { updates.push('require_receipt = ?'); values.push(requireReceipt ? 1 : 0); }
-    if (receiptInstructions !== undefined) { updates.push('receipt_instructions = ?'); values.push(receiptInstructions || null); }
+    if (requireReceipt !== undefined || isCod) { updates.push('require_receipt = ?'); values.push(!isCod && requireReceipt ? 1 : 0); }
+    if (receiptInstructions !== undefined || requireReceipt === false || isCod) { updates.push('receipt_instructions = ?'); values.push(isCod || requireReceipt === false ? null : receiptInstructions || null); }
 
     if (updates.length === 0) return errorResponse('لا توجد بيانات للتحديث', 400);
 
@@ -256,7 +277,7 @@ export async function getPublicPaymentMethods(env: Env, slug: string): Promise<R
       const config = JSON.parse(m.config_details || '{}');
       return {
         id: m.id, providerId: m.provider_id, countryCode: m.country_code, label: m.label,
-        requireReceipt: m.require_receipt === 1, receiptInstructions: m.receipt_instructions,
+        requireReceipt: getProviderById(m.provider_id)?.type !== 'cod' && m.require_receipt === 1, receiptInstructions: m.receipt_instructions,
         displayInfo: {
           phone: config.phone || null, accountName: config.accountName || null,
           bankName: config.bankName || null, accountNumber: config.accountNumber || null,

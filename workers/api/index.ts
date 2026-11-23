@@ -4,6 +4,7 @@
  */
 
 import type { Env, AuthenticatedRequest, FirebaseUser } from './types';
+import { healthResponse } from './utils/health';
 import { verifyFirebaseToken } from './utils/auth';
 import { jsonResponse, errorResponse, corsHeaders } from './utils/helpers';
 import { checkRateLimit, addRateLimitHeaders, cleanupOldRecords } from './utils/rateLimiter';
@@ -14,8 +15,11 @@ import {
   storeProductsKey,
   storeCategoriesKey,
   addCacheStatusHeader,
-  CACHE_TTL
+  CACHE_TTL,
+  authoritativePublicResponse
 } from './utils/cache';
+import { affectedOwner, isPublicMutation, primaryEnv, publishOwnerRevisions, resolveStoreRevision } from './realtime/revisions';
+export { StoreRealtime } from './realtime/StoreRealtime';
 
 // Import route handlers
 import { handleStores } from './routes/stores';
@@ -128,6 +132,9 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    const health = await healthResponse(request, env);
+    if (health) return health;
+
     const rateLimitResult = await checkRateLimit(request, env);
 
     if (!rateLimitResult.allowed) {
@@ -142,6 +149,8 @@ export default {
       if (path.startsWith('/api/public/')) {
         const response = await handlePublicRoutes(request, env, path);
         logApiResponse(request, response.status, Date.now() - startTime);
+        // Never reconstruct a 101 response: that drops its WebSocket endpoint.
+        if (response.status === 101) return response;
         return addRateLimitHeaders(response, rateLimitResult);
       }
 
@@ -226,6 +235,15 @@ export default {
         response = errorResponse('Not Found', 404);
       }
 
+      if (response.ok && isPublicMutation(request.method, path)) {
+        // D1 triggers are the only revision writer. No client-provided revision,
+        // slug or event payload can enter the broadcaster. Failures are repaired
+        // by the active-store alarm; a committed mutation must not become a 500.
+        _ctx.waitUntil(publishOwnerRevisions(env, affectedOwner(path, user.uid)).catch(error => {
+          console.error('Realtime publish deferred to reconciliation:', error);
+        }));
+      }
+
       logApiResponse(request, response.status, Date.now() - startTime, user?.uid);
 
       return addRateLimitHeaders(response, rateLimitResult);
@@ -248,24 +266,35 @@ export default {
 // ===== Public Routes =====
 
 async function handlePublicRoutes(request: Request, env: Env, path: string): Promise<Response> {
-  if (path.match(/^\/api\/public\/store\/[\w-]+$/)) {
+  if (path.match(/^\/api\/public\/store\/[\w-]+\/realtime$/)) {
+    if (request.method !== 'GET') return errorResponse('Method not allowed', 405);
+    const identifier = path.split('/')[4];
+    const row = await resolveStoreRevision(primaryEnv(env), identifier);
+    if (!row) return errorResponse('Store not found', 404);
+    const stub = env.STORE_REALTIME.get(env.STORE_REALTIME.idFromName(row.store_id));
+    return stub.fetch(new Request('https://realtime.internal/connect', {
+      method: 'GET', headers: { Upgrade: request.headers.get('Upgrade') ?? '', 'X-Store-Id': row.store_id },
+    }));
+  }
+
+  if (request.method === 'GET' && path.match(/^\/api\/public\/store\/[\w-]+$/)) {
     const slug = path.split('/').pop()!;
-    return getPublicStore(env, slug);
+    return authoritativePublicResponse(env, slug, 'store', (session, row) => getPublicStore(session, row.store_id));
   }
 
-  if (path.match(/^\/api\/public\/store\/[\w-]+\/products$/)) {
+  if (request.method === 'GET' && path.match(/^\/api\/public\/store\/[\w-]+\/products$/)) {
     const slug = path.split('/')[4];
-    return getPublicStoreProducts(env, slug);
+    return authoritativePublicResponse(env, slug, 'products', (session, row) => getPublicStoreProducts(session, row.store_id));
   }
 
-  if (path.match(/^\/api\/public\/store\/[\w-]+\/categories$/)) {
+  if (request.method === 'GET' && path.match(/^\/api\/public\/store\/[\w-]+\/categories$/)) {
     const slug = path.split('/')[4];
-    return getPublicStoreCategories(env, slug);
+    return authoritativePublicResponse(env, slug, 'categories', (session, row) => getPublicStoreCategories(session, row.store_id));
   }
 
-  if (path.match(/^\/api\/public\/store\/[\w-]+\/payment-methods$/)) {
+  if (request.method === 'GET' && path.match(/^\/api\/public\/store\/[\w-]+\/payment-methods$/)) {
     const slug = path.split('/')[4];
-    return getPublicPaymentMethods(env, slug);
+    return authoritativePublicResponse(env, slug, 'payments', (session, row) => getPublicPaymentMethods(session, row.store_id));
   }
 
   if (request.method === 'POST' && path.match(/^\/api\/public\/store\/[\w-]+\/payment-receipt$/)) {
@@ -295,8 +324,8 @@ async function getPublicStore(env: Env, slug: string): Promise<Response> {
           SELECT s.*, a.plan_id, a.subscription_end
           FROM stores s
           LEFT JOIN admins a ON s.owner_id = a.id
-          WHERE s.slug = ? OR s.id = ?
-        `).bind(slug, slug).first<DBStore>();
+          WHERE s.id = ?
+        `).bind(slug).first<DBStore>();
 
         if (!store) {
           return null;
@@ -344,8 +373,8 @@ async function getPublicStoreProducts(env: Env, slug: string): Promise<Response>
       CACHE_TTL.publicProducts,
       async () => {
         const store = await env.DB.prepare(`
-          SELECT owner_id FROM stores WHERE slug = ? OR id = ?
-        `).bind(slug, slug).first<{ owner_id: string }>();
+          SELECT owner_id FROM stores WHERE id = ?
+        `).bind(slug).first<{ owner_id: string }>();
 
         if (!store) {
           return { error: 'Store not found' };
@@ -398,8 +427,8 @@ async function getPublicStoreCategories(env: Env, slug: string): Promise<Respons
       CACHE_TTL.publicCategories,
       async () => {
         const store = await env.DB.prepare(`
-          SELECT owner_id FROM stores WHERE slug = ? OR id = ?
-        `).bind(slug, slug).first<{ owner_id: string }>();
+          SELECT owner_id FROM stores WHERE id = ?
+        `).bind(slug).first<{ owner_id: string }>();
 
         if (!store) {
           return { error: 'Store not found' };

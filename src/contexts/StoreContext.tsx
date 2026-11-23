@@ -6,8 +6,8 @@
  * شاشة "المتجر غير موجود" رغم أن البيانات معروضة بالفعل.
  *
  * الآن:
- *   - لا polling. الطلبات تُخزَّن في cache، وتُحدَّث عند إعادة التركيز (السلوك
- *     الافتراضي لـReact Query) أو يدوياً بـ`refreshData`.
+ *   - لا polling. Socket للقراءة فقط يحمل revisions، والتحديث يعيد جلب
+ *     الموارد المتغيرة فقط دون إعادة تركيب السلة أو صفحة الدفع.
  *   - عند فشل التحديث تبقى آخر بيانات ناجحة معروضة؛ لا 404 كاذب.
  *   - نميّز "غير موجود" (فشل أولي نهائي) عن "خطأ شبكة" لتعرض الشاشة إعادة
  *     محاولة بدل رسالة 404.
@@ -33,6 +33,7 @@ import {
   type Currency,
 } from '../data/currencies';
 import { usePublicCategories, usePublicProducts, usePublicStore } from '../hooks/usePublicStore';
+import { useStoreRealtime } from '../hooks/useStoreRealtime';
 import type { Store, Product, Category } from '../schemas';
 
 interface StoreContextValue {
@@ -87,12 +88,21 @@ export function StoreProvider({ children, storeId }: StoreProviderProps): React.
   const productsQuery = usePublicProducts(slug);
   const categoriesQuery = usePublicCategories(slug);
 
-  const store = isDemo ? demoStore : (storeQuery.data ?? null);
+  const realtime = useStoreRealtime(slug);
+  // A confirmed deletion must hide stale successful data; network errors must not.
+  const deleted = realtime?.deleted === true || (storeQuery.isError && isNotFoundError(storeQuery.error));
+  const publicStore = useMemo(() => !deleted && storeQuery.data ? {
+    ...storeQuery.data,
+    ...(realtime?.storeId === storeQuery.data.id ? {
+      isActive: realtime.isActive, isAnnualPlan: realtime.isAnnualPlan,
+    } : {}),
+  } : null, [deleted, storeQuery.data, realtime]);
+  const store = isDemo ? demoStore : publicStore;
   const products = useMemo(
-    () => (isDemo ? demoProducts : withDerivedPrices(productsQuery.data ?? [])),
-    [isDemo, productsQuery.data],
+    () => (isDemo ? demoProducts : deleted ? [] : withDerivedPrices(productsQuery.data ?? [])),
+    [isDemo, deleted, productsQuery.data],
   );
-  const categories = isDemo ? demoCategories : (categoriesQuery.data ?? []);
+  const categories = isDemo ? demoCategories : deleted ? [] : (categoriesQuery.data ?? []);
 
   const hasData = Boolean(store);
   const initialLoading =
@@ -103,7 +113,7 @@ export function StoreProvider({ children, storeId }: StoreProviderProps): React.
   const productsLoading = !isDemo && productsQuery.isLoading;
   const initialFailure = !isDemo && !loading && !hasData && storeQuery.isError;
   const missing = initialFailure && isNotFoundError(storeQuery.error);
-  const notFound = !isDemo && !loading && !hasData && (!storeQuery.isError || missing);
+  const notFound = !isDemo && (deleted || (!loading && !hasData && (!storeQuery.isError || missing)));
   const error = initialFailure && !missing ? storeQuery.error : null;
   const productsError =
     !isDemo && productsQuery.isError && !productsQuery.data ? productsQuery.error : null;

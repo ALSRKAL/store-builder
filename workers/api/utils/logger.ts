@@ -15,6 +15,7 @@ interface LogEntry {
 }
 
 interface RequestInfo {
+  requestId?: string;
   method?: string;
   path?: string;
   query?: string;
@@ -53,6 +54,13 @@ export const LOG_LEVELS: Record<string, number> = {
 };
 
 let minLogLevel = LOG_LEVELS.INFO;
+const requestIds = new WeakMap<Request, string>();
+
+export function getRequestId(request: Request): string {
+  let id = requestIds.get(request);
+  if (!id) { id = crypto.randomUUID(); requestIds.set(request, id); }
+  return id;
+}
 
 // ===== Initialization =====
 
@@ -85,9 +93,10 @@ export function extractRequestInfo(request?: Request): RequestInfo {
   const url = new URL(request.url);
   
   return {
+    requestId: getRequestId(request),
     method: request.method,
     path: url.pathname,
-    query: url.search || undefined,
+    query: url.search ? '[redacted]' : undefined,
     userAgent: request.headers.get('User-Agent') || undefined,
     ip: request.headers.get('CF-Connecting-IP') || 
         request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
@@ -110,25 +119,14 @@ export function extractErrorInfo(error?: Error | unknown): ErrorInfo {
 }
 
 function logToConsole(entry: LogEntry): void {
-  const { level, message, ...rest } = entry;
-  const prefix = `[${entry.timestamp}] [${level}]`;
-  
-  switch (level) {
-    case 'DEBUG':
-      console.debug(prefix, message, Object.keys(rest).length > 1 ? rest : '');
-      break;
-    case 'INFO':
-      console.info(prefix, message, Object.keys(rest).length > 1 ? rest : '');
-      break;
-    case 'WARN':
-      console.warn(prefix, message, Object.keys(rest).length > 1 ? rest : '');
-      break;
+  const line = JSON.stringify(entry);
+  switch (entry.level) {
+    case 'DEBUG': console.debug(line); break;
+    case 'INFO': console.info(line); break;
+    case 'WARN': console.warn(line); break;
     case 'ERROR':
-    case 'FATAL':
-      console.error(prefix, message, rest);
-      break;
-    default:
-      console.log(prefix, message, rest);
+    case 'FATAL': console.error(line); break;
+    default: console.log(line);
   }
 }
 
@@ -300,6 +298,7 @@ export function logApiResponse(
   const requestInfo = extractRequestInfo(request);
   
   const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'INFO';
+  if (minLogLevel > LOG_LEVELS[level]) return;
   const message = `${requestInfo.method} ${requestInfo.path} - ${status} (${duration}ms)`;
   
   const entry = formatLogEntry(level, message, {

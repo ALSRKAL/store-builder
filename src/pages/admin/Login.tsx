@@ -9,17 +9,12 @@ import { cn } from '../../lib/utils';
 import { Button, Input, Label } from '../../components/ui';
 import AuthShell from '../../components/auth/AuthShell';
 import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, ArrowRight, Loader2 } from 'lucide-react';
-import type { AdminProfile } from '../../schemas';
+import { getEntitlementRoute } from '../../lib/authEntitlement';
+import ProfileRetry from '../../components/auth/ProfileRetry';
 
 interface FirebaseError extends Error {
   code?: string;
 }
-
-const isSubscriptionValid = (adminData: AdminProfile | null): boolean => {
-  if (!adminData?.subscriptionEnd) return false;
-  const endDate = new Date(adminData.subscriptionEnd);
-  return endDate > new Date();
-};
 
 function Login(): React.JSX.Element {
   const [isLogin, setIsLogin] = useState(true);
@@ -39,20 +34,15 @@ function Login(): React.JSX.Element {
     user,
     adminData,
     loading: authLoading,
+    profileError,
   } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!authLoading && user) {
-      if (isSubscriptionValid(adminData)) {
-        navigate(adminData?.storeName ? '/admin/dashboard' : '/admin/setup', {
-          replace: true,
-        });
-      } else {
-        navigate('/admin/verify', { replace: true });
-      }
+    if (!authLoading && user && (!profileError || adminData)) {
+      navigate(getEntitlementRoute(adminData), { replace: true });
     }
-  }, [user, adminData, authLoading, navigate]);
+  }, [user, adminData, authLoading, profileError, navigate]);
 
   if (authLoading) {
     return (
@@ -64,6 +54,8 @@ function Login(): React.JSX.Element {
       </AuthShell>
     );
   }
+
+  if (user && profileError && !adminData) return <ProfileRetry />;
 
   const getErrorMessage = (err: FirebaseError): string => {
     switch (err.code) {
@@ -98,7 +90,6 @@ function Login(): React.JSX.Element {
         await login(email, password);
       } else {
         await register(email, password);
-        navigate('/admin/verify', { replace: true });
       }
     } catch (err) {
       setError(getErrorMessage(err as FirebaseError));

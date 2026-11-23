@@ -10,9 +10,10 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
-import { auth, googleProvider } from '../config/firebase';
+import { auth, googleProvider, googlePopupResolver } from '../config/firebase';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -31,12 +32,15 @@ import {
   type PlanLimits,
 } from '../config/plans';
 import type { AdminProfile, UpdateAdminInput } from '../schemas';
+import { getEntitlement, type Entitlement } from '../lib/authEntitlement';
 
 // Auth context value interface
 interface AuthContextValue {
   user: FirebaseUser | null;
   adminData: AdminProfile | null;
   loading: boolean;
+  profileError: string | null;
+  entitlement: Entitlement;
   login: (email: string, password: string) => Promise<FirebaseUser>;
   register: (email: string, password: string) => Promise<FirebaseUser>;
   logout: () => Promise<void>;
@@ -73,9 +77,6 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Polling interval for admin data updates (15 seconds)
-const POLLING_INTERVAL = 15000;
-
 // Plan ID to months mapping
 const PLAN_MONTHS_MAP: Record<string, number> = {
   trial: 0,
@@ -88,70 +89,76 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [adminData, setAdminData] = useState<AdminProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const identity = useRef<FirebaseUser | null>(null);
+  const mounted = useRef(false);
+  const generation = useRef(0);
+  const inFlight = useRef<{ generation: number; promise: Promise<AdminProfile | null> } | null>(null);
 
-  // Fetch admin data from Cloudflare API
-  const fetchAdminData = useCallback(async (): Promise<AdminProfile | null> => {
-    if (!user) return null;
+  // A failed request is not a missing profile. Only a successful null response
+  // clears it. Generations also invalidate requests on logout/account changes.
+  const fetchAdminData = useCallback((): Promise<AdminProfile | null> => {
+    const owner = identity.current;
+    const requestGeneration = generation.current;
+    if (!owner) return Promise.resolve(null);
+    if (inFlight.current?.generation === requestGeneration) return inFlight.current.promise;
 
-    try {
-      const data = await api.admin.getProfile();
-      setAdminData(data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching admin data:', error);
-      setAdminData(null);
-      return null;
-    }
-  }, [user]);
+    const promise = (async () => {
+      try {
+        const data = await api.admin.getProfile();
+        if (!mounted.current || generation.current !== requestGeneration) return null;
+        setAdminData(data);
+        setProfileError(null);
+        return data;
+      } catch (error) {
+        if (mounted.current && generation.current === requestGeneration) {
+          setProfileError('تعذّر تحميل بيانات الحساب. تحقّق من الاتصال وأعد المحاولة.');
+        }
+        throw error;
+      } finally {
+        if (mounted.current && generation.current === requestGeneration) setLoading(false);
+        if (inFlight.current?.generation === requestGeneration) inFlight.current = null;
+      }
+    })();
+    inFlight.current = { generation: requestGeneration, promise };
+    return promise;
+  }, []);
 
   useEffect(() => {
-    let pollInterval: ReturnType<typeof setInterval> | null = null;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-
-        // Fetch admin data
-        void (async () => {
-          try {
-            const data = await api.admin.getProfile();
-            setAdminData(data);
-          } catch {
-            // Admin profile not found - user needs to complete setup
-            setAdminData(null);
-          }
-          setLoading(false);
-        })();
-
-        // Set up polling for real-time updates
-        pollInterval = setInterval(() => {
-          void (async () => {
-            try {
-              const data = await api.admin.getProfile();
-              setAdminData(data);
-            } catch {
-              // Silently fail on polling errors
-            }
-          })();
-        }, POLLING_INTERVAL);
-      } else {
-        setUser(null);
-        setAdminData(null);
-        setLoading(false);
-
-        if (pollInterval) {
-          clearInterval(pollInterval);
-        }
-      }
-    });
-
-    return () => {
-      unsubscribeAuth();
-      if (pollInterval) {
-        clearInterval(pollInterval);
+    mounted.current = true;
+    const refresh = (): void => {
+      if (identity.current && document.visibilityState === 'visible') {
+        void fetchAdminData().catch(() => { /* Keep the last authoritative profile. */ });
       }
     };
-  }, []);
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      const changed = identity.current?.uid !== firebaseUser?.uid;
+      if (changed) {
+        generation.current += 1;
+        inFlight.current = null;
+        setAdminData(null);
+        setProfileError(null);
+      }
+      identity.current = firebaseUser;
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        if (changed) setLoading(true);
+        void fetchAdminData().catch(() => { /* Render a retry state, never start a trial. */ });
+      } else {
+        setLoading(false);
+      }
+    });
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+      inFlight.current = null;
+      unsubscribeAuth();
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [fetchAdminData]);
 
   const login = async (email: string, password: string): Promise<FirebaseUser> => {
     const result = await signInWithEmailAndPassword(auth, email, password);
@@ -168,7 +175,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
   };
 
   const loginWithGoogle = async (): Promise<FirebaseUser> => {
-    const result = await signInWithPopup(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider, googlePopupResolver);
     return result.user;
   };
 
@@ -176,45 +183,37 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
     await sendPasswordResetEmail(auth, email);
   };
 
+  const adoptProfile = (profile: AdminProfile, owner: FirebaseUser): void => {
+    if (!mounted.current || identity.current !== owner) return;
+    generation.current += 1;
+    inFlight.current = null;
+    setAdminData(profile);
+    setProfileError(null);
+    setLoading(false);
+  };
+
   const updateAdminData = async (data: UpdateAdminInput): Promise<void> => {
-    if (user) {
-      await api.admin.updateProfile(data);
-      setAdminData((prev) => {
-        if (!prev) return null;
-        // Merge only defined properties
-        const updated: AdminProfile = { ...prev };
-        for (const [key, value] of Object.entries(data)) {
-          if (value !== undefined) {
-            (updated as Record<string, unknown>)[key] = value;
-          }
-        }
-        return updated;
-      });
-    }
+    const owner = identity.current;
+    if (!owner) throw new Error('User not authenticated');
+    const profile = await api.admin.updateProfile(data);
+    adoptProfile(profile, owner);
   };
 
   const createAdminProfile = async (data: Partial<AdminProfile>): Promise<void> => {
-    if (user) {
-      const fullData: AdminProfile = {
-        id: data.id ?? '',
-        email: user.email ?? '',
-        storeIsActive: true,
-        dashboardIsActive: true,
-        hideUpgradeUI: data.hideUpgradeUI ?? false,
-        trialUsed: data.trialUsed ?? false,
-        ...data,
-      };
-
-      await api.admin.createProfile({
-        storeName: fullData.storeName ?? undefined,
-        storeId: fullData.storeId ?? undefined,
-        slug: fullData.slug ?? undefined,
-        whatsapp: fullData.whatsapp ?? undefined,
-        logo: fullData.logo ?? undefined,
-      });
-      setAdminData(fullData);
-    }
+    const owner = identity.current;
+    if (!owner) throw new Error('User not authenticated');
+    const profile = await api.admin.createProfile({
+      storeName: data.storeName ?? undefined,
+      storeId: data.storeId ?? undefined,
+      slug: data.slug ?? undefined,
+      whatsapp: data.whatsapp ?? undefined,
+      logo: data.logo ?? undefined,
+    });
+    // Never replace the entitlement with locally fabricated setup fields.
+    adoptProfile(profile, owner);
   };
+
+  const entitlement = getEntitlement(adminData);
 
   // Check dashboard and store status
   const isDashboardActive = adminData?.dashboardIsActive !== false;
@@ -223,27 +222,22 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
 
   // Get current plan
   const getCurrentPlan = (): Plan => {
-    if (!adminData?.subscriptionEnd) {
-      return getPlanByMonths(0); // Trial
-    }
-    const endDate = new Date(adminData.subscriptionEnd);
-    if (endDate < new Date()) {
-      return getPlanByMonths(0); // Expired = trial
-    }
+    if (!entitlement.active) return getPlanByMonths(0);
 
     // Check planId first
-    if (adminData.planId) {
+    if (entitlement.state === 'trial-active') return getPlanByMonths(0);
+    if (adminData?.planId && adminData.planId !== 'trial') {
       const months = PLAN_MONTHS_MAP[adminData.planId];
       if (months !== undefined) {
         return getPlanByMonths(months);
       }
     }
 
-    return getPlanByMonths(adminData.subscriptionMonths ?? 0);
+    return getPlanByMonths(adminData?.subscriptionMonths ?? 0);
   };
 
   const currentPlan = getCurrentPlan();
-  const isTrial = currentPlan.id === 'trial';
+  const isTrial = entitlement.state === 'trial-active';
 
   // Check limits
   const getLimits = (currentCounts: CurrentCounts): PlanLimits => {
@@ -261,18 +255,24 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
 
   // Initialize trial account
   const initTrialAccount = async (): Promise<void> => {
-    if (user && !adminData?.subscriptionEnd) {
-      try {
-        await api.subscriptions.startTrial();
-        await fetchAdminData();
-      } catch (error) {
-        console.error('Error starting trial:', error);
-      }
+    const owner = identity.current;
+    if (!owner || profileError || !entitlement.canStartTrial) {
+      throw new Error('Trial is not available');
+    }
+    await api.subscriptions.startTrial();
+    if (identity.current === owner) {
+      generation.current += 1;
+      inFlight.current = null;
+      await fetchAdminData();
     }
   };
 
   // Refresh admin data manually
   const refreshAdminData = useCallback((): Promise<AdminProfile | null> => {
+    // Explicit refresh follows mutations (activation/setup); a GET started
+    // before that mutation is not authoritative for the new entitlement.
+    generation.current += 1;
+    inFlight.current = null;
     return fetchAdminData();
   }, [fetchAdminData]);
 
@@ -280,6 +280,8 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
     user,
     adminData,
     loading,
+    profileError,
+    entitlement,
     login,
     register,
     logout,

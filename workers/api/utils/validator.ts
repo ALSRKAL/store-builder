@@ -133,6 +133,8 @@ export function sanitizeString(str: unknown, maxLength = RULES.maxStringLength):
   return str
     .trim()
     .slice(0, maxLength)
+    // Strip control characters while retaining tab/newline formatting.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
@@ -144,6 +146,8 @@ export function sanitizeText(str: unknown, maxLength = RULES.maxTextLength): str
   return str
     .trim()
     .slice(0, maxLength)
+    // Strip control characters while retaining tab/newline formatting.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');

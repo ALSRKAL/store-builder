@@ -1,0 +1,121 @@
+name: Code rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (production requires protected reviewers)
+        type: choice
+        options: [staging, production]
+        required: true
+      worker_version_id:
+        description: Retained Worker version UUID from successful release report
+        type: string
+        required: true
+      pages_deployment_id:
+        description: Retained successful Pages production deployment UUID from same release
+        type: string
+        required: true
+      quality_run_id:
+        description: Successful default-branch Quality push run for target code
+        type: string
+        required: true
+      schema_compatible:
+        description: I have verified retained code compatibility with current forward-only schema and DO migrations
+        type: boolean
+        required: true
+        default: false
+      confirmation:
+        description: Enter code-only-no-sql (no automatic database rollback)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+# Share concurrency lock with release; never overlap deploy and rollback.
+concurrency:
+  group: release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Default branch and approval gate must be configured before protected job starts
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          TARGET: ${{ inputs.environment }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          COMPATIBLE: ${{ inputs.schema_compatible }}
+          PRODUCTION_APPROVAL_CONFIGURED: ${{ vars.PRODUCTION_APPROVAL_CONFIGURED }}
+          PRODUCTION_APPROVAL_MODE: ${{ vars.PRODUCTION_APPROVAL_MODE }}
+        with:
+          script: |
+            const {data:repo} = await github.rest.repos.get(context.repo);
+            if (context.ref !== `refs/heads/${repo.default_branch}` || !['staging','production'].includes(process.env.TARGET) || process.env.CONFIRMATION !== 'code-only-no-sql' || process.env.COMPATIBLE !== 'true') throw new Error('Invalid rollback origin or missing explicit confirmation');
+            if (process.env.TARGET === 'production') {
+              if (process.env.PRODUCTION_APPROVAL_CONFIGURED !== 'true' || process.env.PRODUCTION_APPROVAL_MODE !== 'required-reviewers') throw new Error('Production approval not configured');
+              const {data:environment} = await github.rest.repos.getEnvironment({...context.repo,environment_name:'production'});
+              const rule = environment.protection_rules?.find(rule => rule.type === 'required_reviewers');
+              if (!rule?.reviewers?.length || rule.prevent_self_review !== true || environment.can_admins_bypass !== false) throw new Error('Unsupported or bypassable approval gate');
+            }
+      - name: Machine-readable guard result
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: |
+          node --input-type=module -e 'import fs from "node:fs";fs.writeFileSync("rollback-guard.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID}));'
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rollback-guard-${{ github.run_id }}
+          path: rollback-guard.json
+          retention-days: 30
+  rollback:
+    needs: guard
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+      RELEASE_STAGING_CONFIG: ${{ vars.RELEASE_STAGING_CONFIG }}
+      RELEASE_PRODUCTION_CONFIG: ${{ vars.RELEASE_PRODUCTION_CONFIG }}
+      PRODUCTION_APPROVAL_CONFIGURED: ${{ vars.PRODUCTION_APPROVAL_CONFIGURED }}
+      PRODUCTION_APPROVAL_MODE: ${{ vars.PRODUCTION_APPROVAL_MODE }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WORKER_SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
+      GITHUB_TOKEN: ${{ github.token }}
+      ROLLBACK_WORKER_VERSION_ID: ${{ inputs.worker_version_id }}
+      ROLLBACK_PAGES_DEPLOYMENT_ID: ${{ inputs.pages_deployment_id }}
+      ROLLBACK_QUALITY_RUN_ID: ${{ inputs.quality_run_id }}
+      ROLLBACK_SCHEMA_COMPATIBLE: ${{ inputs.schema_compatible }}
+      ROLLBACK_CONFIRMATION: ${{ inputs.confirmation }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci
+      - name: Validate retained targets; Worker code rollback, readiness, Pages rollback (no SQL)
+        run: node scripts/release/cli.mjs rollback
+      - name: Ensure machine-readable result if setup/install failed
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: |
+          node --input-type=module -e 'import fs from "node:fs";fs.mkdirSync(".release",{recursive:true});if(!fs.existsSync(".release/report.json"))fs.writeFileSync(".release/report.json",JSON.stringify({status:process.env.JOB_RESULT,runId:process.env.GITHUB_RUN_ID,reason:"setup did not complete"}));'
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rollback-${{ github.run_id }}
+          path: .release/report.json
+          retention-days: 90
+          if-no-files-found: warn

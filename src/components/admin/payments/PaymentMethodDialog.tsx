@@ -4,6 +4,7 @@ import {
   SUPPORTED_COUNTRIES,
   getProvidersByCountry,
   getProviderById,
+  getProviderCountry,
   validateProviderConfig,
   type Country,
   type PaymentProvider,
@@ -50,22 +51,38 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
   const [qrImage, setQrImage] = useState<string | null>(null);
   const [qrUploading, setQrUploading] = useState(false);
   const qrInputRef = useRef<HTMLInputElement>(null);
+  const session = useRef<string | null>(null);
+  const saveLock = useRef(false);
+  const qrGeneration = useRef(0);
+  const sessionMethod = useRef<PaymentMethod | null>(null);
+  const callbacks = useRef({ onClose, onSaved });
+  useEffect(() => { callbacks.current = { onClose, onSaved }; }, [onClose, onSaved]);
+  useEffect(() => () => { qrGeneration.current += 1; }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      session.current = null;
+      qrGeneration.current += 1;
+      return;
+    }
+    const key = editingMethod?.id ?? 'new';
+    // Auth polling replaces callbacks and method objects; that is not a new editing session.
+    if (session.current === key) return;
+    session.current = key;
+    sessionMethod.current = editingMethod;
+    qrGeneration.current += 1;
+    setQrUploading(false);
     setErrors([]);
     if (editingMethod) {
       const providerId = editingMethod.providerId ?? editingMethod.provider;
       const matchedProvider = providerId ? getProviderById(providerId) : null;
       if (!matchedProvider) {
         toast.error('تعذّر التعرف على مزوّد طريقة الدفع');
-        onClose();
+        callbacks.current.onClose();
         return;
       }
-      const matchedCountry = SUPPORTED_COUNTRIES.find((item) =>
-        getProvidersByCountry(item.code).some((candidate) => candidate.id === matchedProvider.id),
-      );
-      const config = (editingMethod.configDetails ?? {}) as Record<string, string>;
+      const matchedCountry = getProviderCountry(matchedProvider, editingMethod.countryCode);
+      const config = Object.fromEntries(Object.entries(editingMethod.configDetails ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
       setProvider(matchedProvider);
       setCountry(matchedCountry ?? null);
       setForm({
@@ -78,9 +95,9 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
         instructions: config.instructions ?? '',
       });
       setCustomLabel(editingMethod.label ?? editingMethod.name ?? '');
-      setRequireReceipt(editingMethod.requireReceipt ?? editingMethod.requiresReceipt ?? false);
-      setReceiptInstructions(editingMethod.receiptInstructions ?? editingMethod.instructions ?? '');
-      setQrImage(config.qrCodeImage ?? editingMethod.qrCodeImage ?? null);
+      setRequireReceipt(matchedProvider.type !== 'cod' && (editingMethod.requireReceipt ?? editingMethod.requiresReceipt ?? false));
+      setReceiptInstructions(matchedProvider.type !== 'cod' ? editingMethod.receiptInstructions ?? editingMethod.instructions ?? '' : '');
+      setQrImage(['qr', 'wallet'].includes(matchedProvider.type) ? config.qrCodeImage ?? editingMethod.qrCodeImage ?? null : null);
       setStep(3);
       return;
     }
@@ -97,8 +114,15 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
   const providers = country ? getProvidersByCountry(country.code) : [];
 
   const selectProvider = (next: PaymentProvider): void => {
+    qrGeneration.current += 1;
     setProvider(next);
     setForm(Object.fromEntries(next.fields.map((field) => [field.key, ''])));
+    setCustomLabel('');
+    setRequireReceipt(false);
+    setReceiptInstructions('');
+    setQrImage(null);
+    setQrUploading(false);
+    setErrors([]);
     setStep(3);
   };
 
@@ -109,7 +133,9 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
 
   const uploadQr = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
+    const generation = ++qrGeneration.current;
     if (!isValidImageFile(file)) {
       toast.error('صيغة غير مدعومة', 'استخدم JPG أو PNG أو WebP.');
       return;
@@ -129,20 +155,23 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
         preserveTransparency: true,
       });
       const reader = new FileReader();
-      reader.onload = (loadEvent) => setQrImage(loadEvent.target?.result as string);
+      reader.onload = (loadEvent) => {
+        if (generation === qrGeneration.current) setQrImage(loadEvent.target?.result as string);
+      };
       reader.readAsDataURL(compressed);
     } catch {
       const reader = new FileReader();
-      reader.onload = (loadEvent) => setQrImage(loadEvent.target?.result as string);
+      reader.onload = (loadEvent) => {
+        if (generation === qrGeneration.current) setQrImage(loadEvent.target?.result as string);
+      };
       reader.readAsDataURL(file);
     } finally {
-      setQrUploading(false);
-      event.target.value = '';
+      if (generation === qrGeneration.current) setQrUploading(false);
     }
   };
 
   const save = async (): Promise<void> => {
-    if (!provider || !country) return;
+    if (saveLock.current || qrUploading || !provider || !country) return;
     const validation = validateProviderConfig(provider.id, form);
     if (!validation.valid) {
       setErrors(validation.errors);
@@ -152,15 +181,19 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
       setErrors(['يرجى رفع صورة QR Code']);
       return;
     }
+    saveLock.current = true;
     setSaving(true);
+    const method = sessionMethod.current;
     try {
-      const configDetails: Record<string, string | undefined> = { ...form, qrCodeImage: qrImage || undefined };
+      const configDetails: Record<string, string | undefined> = Object.fromEntries(provider.fields.map((field) => [field.key, form[field.key]?.trim()]));
+      if (provider.type === 'qr' || provider.type === 'wallet') configDetails['qrCodeImage'] = qrImage || undefined;
       Object.keys(configDetails).forEach((key) => {
         if (!configDetails[key]) delete configDetails[key];
       });
       const payload = {
-        label: customLabel || provider.name,
-        name: customLabel || provider.name,
+        countryCode: country.code,
+        label: customLabel.trim() || provider.name,
+        name: customLabel.trim() || provider.name,
         configDetails,
         accountNumber: form['accountNumber'],
         accountName: form['accountName'],
@@ -168,14 +201,14 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
         iban: form['iban'],
         walletName: form['walletName'],
         qrCodeImage: qrImage || undefined,
-        requireReceipt,
-        requiresReceipt: requireReceipt,
-        // الخادم يقرأ receiptInstructions؛ نرسل الاسمين لتوافق النسخ الأقدم.
-        receiptInstructions: requireReceipt ? receiptInstructions : undefined,
-        instructions: requireReceipt ? receiptInstructions : undefined,
+        requireReceipt: provider.type !== 'cod' && requireReceipt,
+        requiresReceipt: provider.type !== 'cod' && requireReceipt,
+        // An empty string clears previous instructions on the worker.
+        receiptInstructions: provider.type !== 'cod' && requireReceipt ? receiptInstructions.trim() : '',
+        instructions: provider.type !== 'cod' && requireReceipt ? receiptInstructions.trim() : '',
       };
-      if (editingMethod) {
-        await api.payments.update(editingMethod.id, payload);
+      if (method) {
+        await api.payments.update(method.id, payload);
       } else {
         await api.payments.create({
           ...payload,
@@ -186,13 +219,15 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
           order: 0,
         });
       }
-      await onSaved();
-      toast.success(editingMethod ? 'تم تحديث طريقة الدفع' : 'تمت إضافة طريقة الدفع');
-      onClose();
+      toast.success(method ? 'تم تحديث طريقة الدفع' : 'تمت إضافة طريقة الدفع');
+      callbacks.current.onClose();
+      // A failed list refresh must not present a successful create as failed (and allow duplicates).
+      try { await callbacks.current.onSaved(); } catch { toast.error('تم الحفظ، لكن تعذّر تحديث القائمة'); }
     } catch (error) {
       console.error('Error saving payment method:', error);
       toast.error('تعذّر حفظ طريقة الدفع');
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   };
@@ -369,7 +404,7 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
                       variant="ghost"
                       size="sm"
                       className="mt-1 text-danger hover:bg-danger/5 hover:text-danger"
-                      onClick={() => setQrImage(null)}
+                      onClick={() => { qrGeneration.current += 1; setQrImage(null); setQrUploading(false); }}
                     >
                       إزالة الصورة
                     </Button>
@@ -377,13 +412,22 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
                 </div>
               ) : null}
 
-              <div className="flex items-center justify-between gap-3 border-y border-border py-3">
+              {!country ? (
+                <div>
+                  <Label htmlFor="pm-country">دولة طريقة الدفع</Label>
+                  <Select value="" onValueChange={(code) => setCountry(SUPPORTED_COUNTRIES.find((item) => item.code === code) ?? null)}>
+                    <SelectTrigger id="pm-country"><SelectValue placeholder="اختر الدولة لتأكيد طريقة الدفع" /></SelectTrigger>
+                    <SelectContent>{SUPPORTED_COUNTRIES.map((item) => <SelectItem key={item.code} value={item.code}>{item.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {provider.type !== 'cod' ? <div className="flex items-center justify-between gap-3 border-y border-border py-3">
                 <div>
                   <p className="text-label font-medium text-foreground">طلب إيصال الدفع</p>
                   <p className="mt-0.5 text-[11px] text-fg-muted">يُطلب من العميل رفع صورة إيصال التحويل.</p>
                 </div>
                 <Switch checked={requireReceipt} onCheckedChange={setRequireReceipt} aria-label="طلب إيصال الدفع" />
-              </div>
+              </div> : <p className="text-label text-fg-muted">الدفع عند الاستلام لا يتطلب إيصال تحويل.</p>}
 
               {requireReceipt ? (
                 <div>
@@ -417,7 +461,7 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
             <Button type="button" variant="outline" onClick={onClose} disabled={saving} className="sm:w-28">
               إلغاء
             </Button>
-            <Button type="button" onClick={() => void save()} disabled={saving} className="flex-1 gap-2">
+            <Button type="button" onClick={() => void save()} disabled={saving || qrUploading || !country} className="flex-1 gap-2">
               {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
               {saving ? 'جاري الحفظ…' : editingMethod ? 'حفظ التعديلات' : 'إضافة طريقة الدفع'}
             </Button>

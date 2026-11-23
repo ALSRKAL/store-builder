@@ -3,6 +3,11 @@
  * نظام تخزين مؤقت متقدم مع Edge Caching و Stale-While-Revalidate
  */
 
+import type { Env } from '../types';
+import { primaryEnv, resolveStoreRevision, revisionSnapshot, type RevisionRow } from '../realtime/revisions';
+import type { PublicResource } from '../realtime/protocol';
+import { errorResponse, jsonResponse } from './helpers';
+
 // ===== Types =====
 interface CacheResult<T> {
   data: T;
@@ -194,6 +199,11 @@ export async function cachedWithSWR<T>(
 }
 
 export async function cached<T>(cacheKey: string, ttlSeconds: number, fetchFn: () => Promise<T>): Promise<CacheResult<T>> {
+  // Legacy public keys have no authoritative revision. They must never be read
+  // or written; public routing owns versioned caching around these loaders.
+  if (cacheKey.startsWith(`${CACHE_PREFIX}:public-`) && !cacheKey.includes('-v3:')) {
+    return { data: await fetchFn(), fromCache: false };
+  }
   const cachedData = await get<T>(cacheKey);
   if (cachedData !== null) {
     return { data: cachedData, fromCache: true };
@@ -201,6 +211,64 @@ export async function cached<T>(cacheKey: string, ttlSeconds: number, fetchFn: (
   const freshData = await fetchFn();
   await set(cacheKey, freshData, ttlSeconds);
   return { data: freshData, fromCache: false };
+}
+
+export function versionedStoreKey(row: RevisionRow, resource: PublicResource): string {
+  const version = revisionSnapshot(row).versions[resource];
+  return createCacheKey(`public-${resource}-v3`, row.store_id, { revision: version });
+}
+
+/** Payloads may be cached across PoPs; the pointer is ALWAYS read from D1 primary.
+ * Readers/writers racing cannot poison a newer key: recheck the version after
+ * loading and retry if it changed. Never cache missing stores or failed responses.
+ */
+export async function authoritativePublicResponse(
+  env: Env,
+  identifier: string,
+  resource: PublicResource,
+  load: (sessionEnv: Env, row: RevisionRow) => Promise<Response>,
+): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const sessionEnv = primaryEnv(env);
+    const row = await resolveStoreRevision(sessionEnv, identifier);
+    if (!row || row.deleted === 1) return noStoreCache(errorResponse('Store not found', 404));
+    const key = versionedStoreKey(row, resource);
+    const cachedData = await get<unknown>(key);
+    let data = cachedData;
+    const fromCache = cachedData !== null;
+    if (!fromCache) {
+      const response = await load(sessionEnv, row);
+      if (!response.ok) return noStoreCache(response);
+      data = await response.json();
+    }
+    const current = await resolveStoreRevision(primaryEnv(env), identifier);
+    if (!current || current.deleted === 1) return noStoreCache(errorResponse('Store not found', 404));
+    if (versionedStoreKey(current, resource) !== key) continue;
+    if (!fromCache) await set(key, data, CACHE_TTL.publicStore);
+    // Availability/entitlement is derived AFTER retrieving the immutable payload;
+    // expiry changes with time even when no D1 write increments the counter.
+    const snapshot = revisionSnapshot(current);
+    if (resource === 'store' && data && typeof data === 'object' && !Array.isArray(data)) {
+      data = { ...data, isActive: snapshot.isActive, isAnnualPlan: snapshot.isAnnualPlan,
+        subscriptionEnd: snapshot.subscriptionEnd };
+    }
+    if (resource === 'payments' && (!snapshot.isAnnualPlan || !snapshot.isActive)) data = [];
+    const response = noStoreCache(addCacheStatusHeader(jsonResponse(data), fromCache));
+    response.headers.set('X-Store-Id', current.store_id);
+    response.headers.set('X-Store-Revision', String(current.revision));
+    response.headers.set('X-Resource-Revision', String(snapshot.versions[resource]));
+    return response;
+  }
+  return noStoreCache(errorResponse('Store is updating; please retry', 503));
+}
+
+export function noStoreCache(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'no-store');
+  headers.set('CDN-Cache-Control', 'no-store');
+  headers.set('Cloudflare-CDN-Cache-Control', 'no-store');
+  headers.set('Access-Control-Expose-Headers', 'X-Store-Id, X-Store-Revision, X-Resource-Revision, X-Cache-Status');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 // ===== Cache Key Helpers =====
