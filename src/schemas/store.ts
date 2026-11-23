@@ -133,6 +133,7 @@ export const createStoreSchema = z.object({
 // Store update schema
 export const updateStoreSchema = z.object({
   name: z.string().optional(),
+  slug: z.string().optional(),
   whatsapp: z.string().optional(),
   logo: z.string().optional(),
   currency: z.string().optional(),

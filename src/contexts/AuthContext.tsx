@@ -21,6 +21,9 @@ import {
   onAuthStateChanged,
   signInWithPopup,
   sendPasswordResetEmail,
+  updateEmail,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   type User as FirebaseUser,
 } from 'firebase/auth';
 import { api } from '../services/api';
@@ -46,6 +49,7 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   loginWithGoogle: () => Promise<FirebaseUser>;
   resetPassword: (email: string) => Promise<void>;
+  changeEmail: (email: string, password?: string) => Promise<void>;
   updateAdminData: (data: UpdateAdminInput) => Promise<void>;
   createAdminProfile: (data: Partial<AdminProfile>) => Promise<void>;
   setAdminData: React.Dispatch<React.SetStateAction<AdminProfile | null>>;
@@ -183,6 +187,31 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
     await sendPasswordResetEmail(auth, email);
   };
 
+  const changeEmail = async (email: string, password?: string): Promise<void> => {
+    const current = auth.currentUser;
+    if (!current) throw new Error('UNAUTHENTICATED');
+    const normalized = email.trim().toLowerCase();
+    if (normalized === (current.email ?? '').toLowerCase()) return;
+    const passwordAccount = current.providerData.some((provider) => provider.providerId === 'password');
+    if (!passwordAccount) throw new Error('GOOGLE_ACCOUNT_RELOGIN');
+    if (!password) throw new Error('PASSWORD_REQUIRED');
+    try {
+      await reauthenticateWithCredential(current, EmailAuthProvider.credential(current.email ?? '', password));
+    } catch {
+      throw new Error('WRONG_PASSWORD');
+    }
+    try {
+      await updateEmail(current, normalized);
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === 'auth/email-already-in-use') throw new Error('EMAIL_IN_USE');
+      if (code === 'auth/requires-recent-login') throw new Error('REAUTH_REQUIRED');
+      throw error;
+    }
+    // Force the next API call to carry the new identity email.
+    await current.getIdToken(true);
+  };
+
   const adoptProfile = (profile: AdminProfile, owner: FirebaseUser): void => {
     if (!mounted.current || identity.current !== owner) return;
     generation.current += 1;
@@ -287,6 +316,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
     logout,
     loginWithGoogle,
     resetPassword,
+    changeEmail,
     updateAdminData,
     createAdminProfile,
     setAdminData,

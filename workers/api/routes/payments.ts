@@ -5,6 +5,7 @@
 import type { Env, AuthenticatedRequest } from '../types';
 import { jsonResponse, errorResponse } from '../utils/helpers';
 import { getProviderById, getProviderCountry, validateProviderConfig } from '../../../src/config/paymentProviders';
+import { resolveStoreIdentity } from '../utils/storeLookup';
 
 function configError(providerId: string, config: unknown): string | null {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return 'تفاصيل الإعدادات غير صالحة';
@@ -265,7 +266,9 @@ async function updateReceiptStatus(env: Env, storeId: string, receiptId: string,
 
 export async function getPublicPaymentMethods(env: Env, slug: string): Promise<Response> {
   try {
-    const store = await env.DB.prepare(`SELECT owner_id FROM stores WHERE slug = ? OR id = ?`).bind(slug, slug).first<{ owner_id: string }>();
+    const identity = await resolveStoreIdentity(env.DB, slug);
+    if (!identity) return errorResponse('المتجر غير موجود', 404);
+    const store = await env.DB.prepare(`SELECT owner_id FROM stores WHERE id = ?`).bind(identity.id).first<{ owner_id: string }>();
     if (!store) return errorResponse('المتجر غير موجود', 404);
 
     const methods = await env.DB.prepare(`
@@ -303,7 +306,9 @@ export async function submitPaymentReceipt(
     const { paymentMethodId, customerName, customerPhone, amount, receiptImage, notes } = data;
     if (!paymentMethodId || !receiptImage) return errorResponse('بيانات ناقصة', 400);
 
-    const store = await env.DB.prepare(`SELECT owner_id FROM stores WHERE slug = ? OR id = ?`).bind(slug, slug).first<{ owner_id: string }>();
+    const identity = await resolveStoreIdentity(env.DB, slug);
+    if (!identity) return errorResponse('المتجر غير موجود', 404);
+    const store = await env.DB.prepare(`SELECT owner_id FROM stores WHERE id = ?`).bind(identity.id).first<{ owner_id: string }>();
     if (!store) return errorResponse('المتجر غير موجود', 404);
 
     const method = await env.DB.prepare(`SELECT id, require_receipt FROM store_payment_methods WHERE id = ? AND store_id = ? AND is_active = 1`).bind(paymentMethodId, store.owner_id).first<{ id: string; require_receipt: number }>();

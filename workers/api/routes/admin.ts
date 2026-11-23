@@ -5,6 +5,7 @@
 import type { Env, AuthenticatedRequest } from '../types';
 import { jsonResponse, errorResponse, parseBody, now } from '../utils/helpers';
 import { getUserId } from '../utils/auth';
+import { validateEmail } from '../utils/validator';
 
 interface DBAdmin {
   id: string;
@@ -35,6 +36,7 @@ interface AdminInput {
   storeName?: string;
   storeId?: string;
   slug?: string;
+  email?: string;
   whatsapp?: string;
   logo?: string;
   whatsappApiKey?: string;
@@ -54,7 +56,7 @@ export async function handleAdmin(
   }
 
   if (method === 'GET' && path === '/api/admin/profile') {
-    return getAdminProfile(env, userId, userEmail);
+    return getAdminProfile(env, userId, userEmail, request.user?.emailVerified === true);
   }
 
   if (method === 'PUT' && path === '/api/admin/profile') {
@@ -110,11 +112,13 @@ export async function handleAdmin(
   return errorResponse('Not Found', 404);
 }
 
-async function getAdminProfile(env: Env, userId: string, userEmail?: string): Promise<Response> {
+export async function getAdminProfile(env: Env, userId: string, userEmail?: string, emailVerified = false): Promise<Response> {
   try {
     let admin = await env.DB.prepare(`SELECT * FROM admins WHERE id = ?`).bind(userId).first<DBAdmin>();
 
-    if (!admin && userEmail) {
+    // Legacy adoption by unverified email would let anyone claim an existing
+    // merchant's store. Only a verified Google/Firebase token may re-key a profile.
+    if (!admin && userEmail && emailVerified) {
       admin = await env.DB.prepare(`SELECT * FROM admins WHERE email = ?`).bind(userEmail).first<DBAdmin>();
       
       if (admin) {
@@ -127,6 +131,19 @@ async function getAdminProfile(env: Env, userId: string, userEmail?: string): Pr
         await env.DB.prepare(`UPDATE categories SET store_id = ?, updated_at = ? WHERE store_id = ?`).bind(userId, timestamp, oldId).run();
         
         admin = await env.DB.prepare(`SELECT * FROM admins WHERE id = ?`).bind(userId).first<DBAdmin>();
+      }
+    }
+
+    // Reconcile the login email after a Firebase email change. Same UID only:
+    // never transfers ownership, and a unique conflict keeps the old value.
+    const normalizedEmail = userEmail?.trim().toLowerCase();
+    if (admin && normalizedEmail && admin.email !== normalizedEmail) {
+      try {
+        await env.DB.prepare(`UPDATE admins SET email = ?, updated_at = ? WHERE id = ? AND email <> ?`)
+          .bind(normalizedEmail, now(), admin.id, normalizedEmail).run();
+        admin.email = normalizedEmail;
+      } catch {
+        // Another profile already owns the new address; surface the stored email.
       }
     }
 
@@ -183,11 +200,20 @@ async function createAdminProfile(
   }
 }
 
-async function updateAdminProfile(env: Env, userId: string, data: AdminInput): Promise<Response> {
+export async function updateAdminProfile(env: Env, userId: string, data: AdminInput): Promise<Response> {
   try {
     const updates: string[] = [];
     const values: unknown[] = [];
 
+    if (data.email !== undefined) {
+      const email = validateEmail(data.email);
+      if (!email.valid || !email.value) return errorResponse(email.error ?? 'البريد الإلكتروني غير صالح', 400);
+      const taken = await env.DB.prepare(`SELECT id FROM admins WHERE email = ? AND id <> ?`)
+        .bind(email.value, userId).first<{ id: string }>();
+      if (taken) return errorResponse('البريد الإلكتروني مستخدم بالفعل', 409);
+      updates.push('email = ?');
+      values.push(email.value);
+    }
     if (data.storeName !== undefined) { updates.push('store_name = ?'); values.push(data.storeName); }
     if (data.whatsapp !== undefined) { updates.push('whatsapp = ?'); values.push(data.whatsapp); }
     if (data.logo !== undefined) { updates.push('logo = ?'); values.push(data.logo); }
@@ -206,6 +232,8 @@ async function updateAdminProfile(env: Env, userId: string, data: AdminInput): P
     const admin = await env.DB.prepare(`SELECT * FROM admins WHERE id = ?`).bind(userId).first<DBAdmin>();
     return jsonResponse(formatAdmin(admin!));
   } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (/UNIQUE constraint failed: admins\.email/i.test(message)) return errorResponse('البريد الإلكتروني مستخدم بالفعل', 409);
     console.error('Error updating admin profile:', error);
     return errorResponse('Error updating profile', 500);
   }

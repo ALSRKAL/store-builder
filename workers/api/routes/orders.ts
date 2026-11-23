@@ -8,6 +8,7 @@ import { jsonResponse, errorResponse } from '../utils/helpers';
 import { getPaginationParams, paginatedResponse, buildWhereClause, validateSortColumn } from '../utils/pagination';
 import { validateOrderInput, sanitizeString, sanitizeText } from '../utils/validator';
 import { sendFCMToStore } from '../utils/fcm';
+import { resolveStoreIdentity } from '../utils/storeLookup';
 
 const ALLOWED_SORT_COLUMNS = ['created_at', 'updated_at', 'order_number', 'total', 'status'];
 
@@ -107,12 +108,16 @@ export async function createPublicOrder(env: Env, slug: string, data: OrderInput
       receiptImage
     } = validation.data as OrderInput;
 
+    const identity = await resolveStoreIdentity(env.DB, slug);
+    if (!identity) {
+      return errorResponse('المتجر غير موجود', 404);
+    }
     const store = await env.DB.prepare(`
       SELECT s.owner_id, s.name as store_name, s.currency, a.whatsapp
       FROM stores s
       LEFT JOIN admins a ON s.owner_id = a.id
-      WHERE s.slug = ? OR s.id = ?
-    `).bind(slug, slug).first<StoreInfo>();
+      WHERE s.id = ?
+    `).bind(identity.id).first<StoreInfo>();
 
     if (!store) {
       return errorResponse('المتجر غير موجود', 404);

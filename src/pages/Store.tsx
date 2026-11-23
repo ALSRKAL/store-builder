@@ -113,6 +113,14 @@ function Store(): React.JSX.Element {
     navigate(basePath, { replace: true });
   }, [tail, segments, navigate, basePath]);
 
+  // الروابط القديمة تعمل عبر alias؛ نُحوّل شريط العنوان إلى الرابط canonical
+  // حتى تبقى المشاركة/OG والحملات على الدومين الحالي بعد تغيير اسم المتجر.
+  useEffect(() => {
+    if (!store?.slug || store.slug === storeId) return;
+    const suffix = tail ? `/${tail}` : '';
+    navigate(`/store/${store.slug}${suffix}${window.location.search}`, { replace: true });
+  }, [store?.slug, storeId, tail, navigate]);
+
   // مسار منتج غير موجود بعد اكتمال التحميل → عودة نظيفة بدل شاشة فارغة
   useEffect(() => {
     if (!productId || loading || productsLoading) return;

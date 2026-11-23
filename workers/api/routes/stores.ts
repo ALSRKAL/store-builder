@@ -5,6 +5,9 @@
 import type { Env, AuthenticatedRequest, DBStore } from '../types';
 import { jsonResponse, errorResponse, parseBody, now } from '../utils/helpers';
 import { getUserId } from '../utils/auth';
+import { validateName, validateSlug } from '../utils/validator';
+
+const RESERVED_SLUGS = new Set(['demo', 'admin', 'api', 'www', 'store', 'assets', 'static']);
 
 interface StoreInput {
   name?: string;
@@ -172,7 +175,7 @@ async function createStore(env: Env, userId: string, data: StoreInput): Promise<
   }
 }
 
-async function updateStore(env: Env, storeId: string, userId: string, data: StoreInput): Promise<Response> {
+export async function updateStore(env: Env, storeId: string, userId: string, data: StoreInput): Promise<Response> {
   try {
     const store = await env.DB.prepare(`
       SELECT * FROM stores WHERE (id = ? OR slug = ?) AND owner_id = ?
@@ -182,12 +185,52 @@ async function updateStore(env: Env, storeId: string, userId: string, data: Stor
       return errorResponse('Store not found or unauthorized', 404);
     }
 
+    let nextName = store.name;
+    if (data.name !== undefined) {
+      const name = validateName(data.name, 'اسم المتجر');
+      if (!name.valid || !name.value) return errorResponse(name.error ?? 'اسم المتجر غير صالح', 400);
+      nextName = name.value;
+    }
+
+    let nextSlug = store.slug;
+    if (data.slug !== undefined) {
+      const slug = validateSlug(data.slug, 'رابط المتجر');
+      if (!slug.valid || !slug.value) return errorResponse(slug.error ?? 'رابط المتجر غير صالح', 400);
+      // Reject silently rewritten input (uppercase/spaces) instead of saving a
+      // different slug than the merchant typed.
+      if (String(data.slug).trim() !== slug.value) return errorResponse('رابط المتجر يجب أن يكون بأحرف إنجليزية صغيرة وأرقام وشرطات فقط', 400);
+      if (RESERVED_SLUGS.has(slug.value)) return errorResponse('هذا الرابط محجوز. اختر اسماً آخر.', 409);
+      nextSlug = slug.value;
+    }
+
+    if (nextSlug !== store.slug) {
+      // Never let a rename shadow another store's immutable id or an alias
+      // owned by a different store. Current slugs and ids take precedence on read.
+      const conflict = await env.DB.prepare(`
+        SELECT 1 AS taken FROM stores WHERE (slug = ? OR id = ?) AND id <> ?
+        LIMIT 1
+      `).bind(nextSlug, nextSlug, store.id).first<{ taken: number }>();
+      if (conflict) return errorResponse('رابط المتجر مستخدم بالفعل', 409);
+      try {
+        const aliasConflict = await env.DB.prepare(`
+          SELECT 1 AS taken FROM store_slug_aliases WHERE alias = ? AND store_id <> ? LIMIT 1
+        `).bind(nextSlug, store.id).first<{ taken: number }>();
+        if (aliasConflict) return errorResponse('رابط المتجر مستخدم بالفعل', 409);
+      } catch {
+        // Legacy databases without the alias table still get the stores check.
+      }
+    }
+
     const updates: string[] = [];
     const values: unknown[] = [];
 
     if (data.name !== undefined) {
       updates.push('name = ?');
-      values.push(data.name);
+      values.push(nextName);
+    }
+    if (data.slug !== undefined && nextSlug !== store.slug) {
+      updates.push('slug = ?');
+      values.push(nextSlug);
     }
     if (data.whatsapp !== undefined) {
       updates.push('whatsapp = ?');
@@ -210,13 +253,21 @@ async function updateStore(env: Env, storeId: string, userId: string, data: Stor
       return errorResponse('No fields to update', 400);
     }
 
+    const timestamp = now();
     updates.push('updated_at = ?');
-    values.push(now());
+    values.push(timestamp);
     values.push(store.id);
 
-    await env.DB.prepare(`
-      UPDATE stores SET ${updates.join(', ')} WHERE id = ?
-    `).bind(...values).run();
+    const statements = [
+      env.DB.prepare(`UPDATE stores SET ${updates.join(', ')} WHERE id = ?`).bind(...values),
+    ];
+    // Dashboard reads admins.store_name/slug; sync them in the same atomic batch.
+    if (nextName !== store.name || nextSlug !== store.slug) {
+      statements.push(env.DB.prepare(`
+        UPDATE admins SET store_name = ?, slug = ?, updated_at = ? WHERE id = ?
+      `).bind(nextName, nextSlug, timestamp, userId));
+    }
+    await env.DB.batch(statements);
 
     const updated = await env.DB.prepare(`
       SELECT * FROM stores WHERE id = ?
@@ -224,6 +275,8 @@ async function updateStore(env: Env, storeId: string, userId: string, data: Stor
 
     return jsonResponse(formatStore(updated!));
   } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (/UNIQUE constraint failed/i.test(message)) return errorResponse('رابط المتجر مستخدم بالفعل', 409);
     console.error('Error updating store:', error);
     return errorResponse('Error updating store', 500);
   }

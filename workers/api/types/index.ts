@@ -27,6 +27,7 @@ export interface AuthenticatedRequest extends Request {
 export interface FirebaseUser {
   uid: string;
   email?: string;
+  emailVerified?: boolean;
   name?: string;
 }
 

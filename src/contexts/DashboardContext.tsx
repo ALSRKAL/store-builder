@@ -32,6 +32,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { api } from '../services/api';
+import SlugService from '../utils/slugService';
 import {
   uploadImage,
   uploadImages,
@@ -90,6 +91,9 @@ export interface CategoryFormData {
 }
 
 export interface StoreInfoUpdate {
+  name?: string;
+  email?: string;
+  password?: string;
   whatsapp?: string;
   logoFile?: File;
 }
@@ -208,6 +212,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
     hideUpgradeUI,
     logout,
     refreshAdminData,
+    changeEmail,
   } = useAuth();
   const navigate = useNavigate();
 
@@ -458,15 +463,43 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
     }
   };
 
+  const nextAvailableSlug = async (storeName: string): Promise<string> => {
+    const base = SlugService.generateBaseSlug(storeName);
+    if (!base || base.length < 3) throw new Error('INVALID_STORE_NAME');
+    let candidate = base;
+    for (let suffix = 0; suffix < 50; suffix += 1) {
+      try {
+        const existing = await api.public.getStore(candidate);
+        if (existing.id === adminData?.storeId) return candidate;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (/not found|404|غير موجود/i.test(message)) return candidate;
+        throw error;
+      }
+      candidate = `${base}-${suffix + 1}`;
+    }
+    throw new Error('SLUG_UNAVAILABLE');
+  };
+
   const handleUpdateStoreInfo = async ({
+    name,
+    email,
+    password,
     whatsapp,
     logoFile,
   }: StoreInfoUpdate): Promise<void> => {
     if (!adminData?.storeId) return;
     try {
-      const updates: Record<string, string> = {};
+      const storeUpdates: { name?: string; slug?: string; whatsapp?: string; logo?: string } = {};
       const oldLogo = adminData.logo ?? adminData.storeLogo;
-      if (whatsapp) updates['whatsapp'] = whatsapp;
+      if (name !== undefined && name.trim() !== (adminData.storeName ?? '')) {
+        const trimmed = name.trim();
+        if (trimmed.length < 2) throw new Error('INVALID_STORE_NAME');
+        const slug = await nextAvailableSlug(trimmed);
+        storeUpdates.name = trimmed;
+        if (slug !== (adminData.slug ?? adminData.storeSlug)) storeUpdates.slug = slug;
+      }
+      if (whatsapp) storeUpdates.whatsapp = whatsapp;
       if (logoFile && user) {
         const result = await uploadImage(logoFile, {
           folder: `stores/${user.uid}/logo`,
@@ -475,21 +508,37 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
           quality: 0.9,
         });
         if (result?.url) {
-          updates['logo'] = result.url;
-        } else throw new Error('فشل رفع الشعار الجديد');
+          storeUpdates.logo = result.url;
+        } else throw new Error('LOGO_UPLOAD_FAILED');
       }
-      if (Object.keys(updates).length > 0) {
-        await api.stores.update(adminData.storeId, updates);
-        await api.admin.updateProfile(updates);
-        // بعد نجاح تحديث المتجر والملف فقط، حتى لا يُفقد الشعار القديم عند الفشل.
-        if (oldLogo && updates['logo']) void deleteImages([oldLogo]);
-        // حدّث adminData محلياً كي تظهر القيم الجديدة في الإعدادات فوراً.
-        await refreshAdminData();
+      if (Object.keys(storeUpdates).length > 0) {
+        await api.stores.update(adminData.storeId, storeUpdates);
+        if (oldLogo && storeUpdates.logo) void deleteImages([oldLogo]);
       }
+      const normalizedEmail = email?.trim().toLowerCase();
+      if (normalizedEmail && normalizedEmail !== (adminData.email ?? '').toLowerCase()) {
+        if (!password) throw new Error('PASSWORD_REQUIRED');
+        await changeEmail(normalizedEmail, password);
+        // The Worker reconciles the same-UID email; this call makes it immediate.
+        await api.admin.updateProfile({ email: normalizedEmail });
+      }
+      if (Object.keys(storeUpdates).length > 0 || normalizedEmail) await refreshAdminData();
       toast.success('تم تحديث معلومات المتجر');
     } catch (error) {
-      console.error('Error updating store info:', error);
-      toast.error('تعذّر تحديث المعلومات');
+      const code = error instanceof Error ? error.message : '';
+      const known: Record<string, [string, string]> = {
+        INVALID_STORE_NAME: ['اسم المتجر قصير', 'استخدم حرفين على الأقل.'],
+        SLUG_UNAVAILABLE: ['تعذّر توليد رابط للمتجر', 'جرّب اسماً مختلفاً.'],
+        PASSWORD_REQUIRED: ['كلمة المرور مطلوبة', 'أدخل كلمة المرور الحالية لتغيير البريد.'],
+        WRONG_PASSWORD: ['كلمة المرور غير صحيحة', 'أعد المحاولة.'],
+        GOOGLE_ACCOUNT_RELOGIN: ['تغيير البريد يحتاج إعادة دخول', 'سجّل الدخول من جديد عبر Google ثم أعد المحاولة.'],
+        EMAIL_IN_USE: ['البريد مستخدم بالفعل', 'اختر بريداً آخر.'],
+        REAUTH_REQUIRED: ['الجلسة قديمة', 'سجّل الدخول من جديد ثم أعد المحاولة.'],
+        LOGO_UPLOAD_FAILED: ['تعذّر رفع الشعار', 'أعد المحاولة.'],
+      };
+      if (known[code]) toast.error(known[code][0], known[code][1]);
+      else if (code.includes('رابط المتجر مستخدم') || /UNIQUE/i.test(code)) toast.error('رابط المتجر مستخدم بالفعل', 'غيّر اسم المتجر قليلاً.');
+      else toast.error('تعذّر تحديث المعلومات', 'تحقّق من الاتصال وأعد المحاولة.');
       throw error;
     }
   };

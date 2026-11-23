@@ -3,6 +3,8 @@
  * نظام SEO متقدم لتحسين ظهور المتاجر في محركات البحث
  */
 
+import { resolveStoreIdentity } from '../utils/storeLookup';
+
 // ===== Types =====
 
 interface Env {
@@ -252,12 +254,18 @@ Host: ${BASE_URL}
 
 export async function generateStoreSitemap(env: Env, slug: string): Promise<Response> {
     try {
+        // Old shared links resolve through aliases; emit the canonical slug.
+        const identity = await resolveStoreIdentity(env.DB, slug);
+        if (!identity) {
+            return new Response('Store not found', { status: 404 });
+        }
+        const canonicalSlug = identity.slug;
         // جلب معلومات المتجر
         const store = await env.DB.prepare(`
       SELECT s.slug, s.name, s.logo, s.updated_at, s.owner_id
       FROM stores s
-      WHERE s.slug = ? AND s.is_active = 1
-    `).bind(slug).first<StoreForSitemap & { logo: string; owner_id: string }>();
+      WHERE s.id = ? AND s.is_active = 1
+    `).bind(identity.id).first<StoreForSitemap & { logo: string; owner_id: string }>();
 
         if (!store) {
             return new Response('Store not found', { status: 404 });
@@ -277,7 +285,7 @@ export async function generateStoreSitemap(env: Env, slug: string): Promise<Resp
   
   <!-- صفحة المتجر الرئيسية -->
   <url>
-    <loc>${BASE_URL}/store/${escapeXml(slug)}</loc>
+    <loc>${BASE_URL}/store/${escapeXml(canonicalSlug)}</loc>
     <lastmod>${formatDate(store.updated_at)}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
@@ -289,7 +297,7 @@ export async function generateStoreSitemap(env: Env, slug: string): Promise<Resp
             const lastMod = formatDate(product.updated_at);
             sitemap += `
   <url>
-    <loc>${BASE_URL}/store/${escapeXml(slug)}?product=${product.id}</loc>
+    <loc>${BASE_URL}/store/${escapeXml(canonicalSlug)}?product=${product.id}</loc>
     <lastmod>${lastMod}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>

@@ -72,7 +72,7 @@ interface SettingsTabProps {
   storeLocation?: LocationData | null;
   onSaveLocation: (location: LocationData) => void | Promise<void>;
   onToggleLocationVisibility: () => Promise<void>;
-  onUpdateStoreInfo: (data: { whatsapp?: string; logoFile?: File }) => Promise<void>;
+  onUpdateStoreInfo: (data: { name?: string; email?: string; password?: string; whatsapp?: string; logoFile?: File }) => Promise<void>;
   storeAnnouncement?: AnnouncementData | null;
   onSaveAnnouncement: (data: AnnouncementData) => Promise<void>;
   storeSocialLinks?: SocialLinksData | null;

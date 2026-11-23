@@ -47,6 +47,7 @@ export const createAdminSchema = z.object({
 
 // Admin update schema
 export const updateAdminSchema = z.object({
+  email: z.string().email().optional(),
   storeName: z.string().optional(),
   whatsapp: z.string().optional(),
   logo: z.string().optional(),

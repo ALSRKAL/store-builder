@@ -1,18 +1,21 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Camera, Check, Loader2, Pencil, X } from 'lucide-react';
 import { Button, Input, Label, toast } from '../../ui';
 import { toEnglishNumbers } from '../../../utils/numberUtils';
+import SlugService from '../../../utils/slugService';
 
 export interface StoreInfoAdmin {
   storeName?: string;
   email?: string;
   whatsapp?: string;
   logo?: string;
+  slug?: string;
+  storeSlug?: string;
 }
 
 interface StoreInfoSectionProps {
   adminData?: StoreInfoAdmin | null;
-  onUpdateStoreInfo: (data: { whatsapp?: string; logoFile?: File }) => Promise<void>;
+  onUpdateStoreInfo: (data: { name?: string; email?: string; password?: string; whatsapp?: string; logoFile?: File }) => Promise<void>;
 }
 
 /**
@@ -24,8 +27,57 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
   const [editingWhatsapp, setEditingWhatsapp] = useState(false);
   const [whatsapp, setWhatsapp] = useState(adminData?.whatsapp ?? '');
   const [savingWhatsapp, setSavingWhatsapp] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState(adminData?.storeName ?? '');
+  const [savingName, setSavingName] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [email, setEmail] = useState(adminData?.email ?? '');
+  const [password, setPassword] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const currentSlug = adminData?.slug ?? adminData?.storeSlug ?? '';
+  const slugPreview = useMemo(() => SlugService.generateBaseSlug(name.trim()) || '(رابط تلقائي)', [name]);
+
+  const saveName = async (): Promise<void> => {
+    const trimmed = name.trim();
+    if (trimmed.length < 2) {
+      toast.warning('اسم المتجر قصير', 'استخدم حرفين على الأقل.');
+      return;
+    }
+    setSavingName(true);
+    try {
+      await onUpdateStoreInfo({ name: trimmed });
+      setEditingName(false);
+    } catch {
+      // الـContext يعرض Toast بالفعل.
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const saveEmail = async (): Promise<void> => {
+    const normalized = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      toast.warning('بريد غير صالح', 'أدخل بريداً إلكترونياً صحيحاً.');
+      return;
+    }
+    if (!password) {
+      toast.warning('كلمة المرور مطلوبة', 'أدخل كلمة المرور الحالية لتأكيد تغيير بريد الدخول.');
+      return;
+    }
+    setSavingEmail(true);
+    try {
+      await onUpdateStoreInfo({ email: normalized, password });
+      setEditingEmail(false);
+      setPassword('');
+    } catch {
+      // الـContext يعرض Toast بالفعل.
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   const saveWhatsapp = async (): Promise<void> => {
     const value = toEnglishNumbers(whatsapp).trim();
@@ -96,13 +148,113 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
       </div>
 
       <dl className="divide-y divide-border border-y border-border">
-        <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-center sm:gap-4">
-          <dt className="text-label text-fg-muted">اسم المتجر</dt>
-          <dd className="m-0 truncate text-start text-label font-medium text-foreground">{adminData?.storeName || '—'}</dd>
+        <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
+          <dt className="pt-2 text-label text-fg-muted">اسم المتجر</dt>
+          {editingName ? (
+            <dd className="m-0 flex flex-col gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Label htmlFor="store-name" className="sr-only">اسم المتجر</Label>
+                <Input
+                  id="store-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  autoFocus
+                  maxLength={60}
+                  className="h-11 flex-1"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void saveName();
+                    if (event.key === 'Escape') setEditingName(false);
+                  }}
+                />
+                <Button type="button" size="iconSm" aria-label="حفظ اسم المتجر" onClick={() => void saveName()} disabled={savingName}>
+                  {savingName ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" strokeWidth={1.75} aria-hidden />}
+                </Button>
+                <Button
+                  type="button"
+                  size="iconSm"
+                  variant="outline"
+                  aria-label="إلغاء تعديل الاسم"
+                  onClick={() => { setName(adminData?.storeName ?? ''); setEditingName(false); }}
+                >
+                  <X className="size-4" strokeWidth={1.75} aria-hidden />
+                </Button>
+              </div>
+              <p className="text-[12px] leading-relaxed text-fg-muted">
+                الرابط الجديد: <span dir="ltr" className="font-medium">/store/{slugPreview}</span>
+                {' '}— سيظل رابطك القديم يعمل بعد التغيير.
+              </p>
+            </dd>
+          ) : (
+            <dd className="m-0 flex items-center gap-1">
+              <span className="truncate text-label font-medium text-foreground">{adminData?.storeName || '—'}</span>
+              <Button type="button" size="iconSm" variant="ghost" aria-label="تعديل اسم المتجر" onClick={() => { setName(adminData?.storeName ?? ''); setEditingName(true); }}>
+                <Pencil className="size-4" strokeWidth={1.75} aria-hidden />
+              </Button>
+            </dd>
+          )}
         </div>
         <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-center sm:gap-4">
-          <dt className="text-label text-fg-muted">البريد الإلكتروني</dt>
-          <dd className="m-0 truncate text-start text-label font-medium text-foreground"><span dir="ltr">{adminData?.email || '—'}</span></dd>
+          <dt className="text-label text-fg-muted">رابط المتجر</dt>
+          <dd className="m-0 truncate text-start text-label font-medium text-foreground" dir="ltr">
+            {currentSlug ? `/store/${currentSlug}` : '—'}
+          </dd>
+        </div>
+        <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
+          <dt className="pt-2 text-label text-fg-muted">البريد الإلكتروني</dt>
+          {editingEmail ? (
+            <dd className="m-0 flex flex-col gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Label htmlFor="store-email" className="sr-only">البريد الإلكتروني</Label>
+                <Input
+                  id="store-email"
+                  type="email"
+                  dir="ltr"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoFocus
+                  className="h-11 flex-1 text-start"
+                />
+              </div>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Label htmlFor="store-email-password" className="sr-only">كلمة المرور الحالية</Label>
+                <Input
+                  id="store-email-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="كلمة المرور الحالية للتأكيد"
+                  className="h-11 flex-1"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void saveEmail();
+                    if (event.key === 'Escape') setEditingEmail(false);
+                  }}
+                />
+                <Button type="button" size="iconSm" aria-label="حفظ البريد الإلكتروني" onClick={() => void saveEmail()} disabled={savingEmail}>
+                  {savingEmail ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" strokeWidth={1.75} aria-hidden />}
+                </Button>
+                <Button
+                  type="button"
+                  size="iconSm"
+                  variant="outline"
+                  aria-label="إلغاء تعديل البريد"
+                  onClick={() => { setEmail(adminData?.email ?? ''); setPassword(''); setEditingEmail(false); }}
+                >
+                  <X className="size-4" strokeWidth={1.75} aria-hidden />
+                </Button>
+              </div>
+              <p className="text-[12px] leading-relaxed text-fg-muted">
+                هذا بريد الدخول. تغييره يتطلب كلمة المرور الحالية، وحسابات Google تحتاج إعادة تسجيل دخول.
+              </p>
+            </dd>
+          ) : (
+            <dd className="m-0 flex items-center gap-1">
+              <span className="truncate text-label font-medium text-foreground" dir="ltr">{adminData?.email || '—'}</span>
+              <Button type="button" size="iconSm" variant="ghost" aria-label="تعديل البريد الإلكتروني" onClick={() => { setEmail(adminData?.email ?? ''); setPassword(''); setEditingEmail(true); }}>
+                <Pencil className="size-4" strokeWidth={1.75} aria-hidden />
+              </Button>
+            </dd>
+          )}
         </div>
         <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-center sm:gap-4">
           <dt className="text-label text-fg-muted">واتساب المتجر</dt>
