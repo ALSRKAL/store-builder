@@ -47,3 +47,4 @@ release-artifact/
 *.njsproj
 *.sln
 *.sw?
+.secrets/
