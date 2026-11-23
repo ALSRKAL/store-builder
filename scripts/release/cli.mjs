@@ -122,6 +122,23 @@ async function waitReady(config, releaseId) {
     }
   }
 }
+// Pages edge propagation can lag behind the successful deployment record; poll with a unique cache key.
+async function waitPagesMarker(config, manifest, releaseId) {
+  let last = 'marker unavailable';
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      const url = `${config.siteUrl}/release.json?release=${encodeURIComponent(releaseId)}&attempt=${attempt}`;
+      const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000), headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } });
+      if (response.ok) {
+        const live = await response.json();
+        if (live.sha === manifest.sha && live.environment === environment) return live;
+        last = `sha=${live.sha} environment=${live.environment}`;
+      } else last = `status ${response.status}`;
+    } catch (error) { last = error instanceof Error ? error.message : String(error); }
+    if (attempt < 11) await new Promise(done => setTimeout(done, 5000));
+  }
+  throw new Error(`Pages deployed SHA/environment readiness mismatch (last seen ${last})`);
+}
 async function build(config) {
   const provenance = await trusted(env.RELEASE_SHA, env.QUALITY_RUN_ID);
   mkdirSync(resolve(artifact, 'files'), { recursive: true });
@@ -155,10 +172,8 @@ async function deploy(config) {
   const latest = await cf(config, `/pages/projects/${config.pagesProject}/deployments?per_page=10`);
   const matching = latest.find(item => item.deployment_trigger?.metadata?.commit_hash === manifest.sha && item.deployment_trigger?.metadata?.commit_message === releaseId && item.environment === 'production' && item.latest_stage?.name === 'deploy' && item.latest_stage?.status === 'success');
   if (!matching) throw new Error('Cannot confirm successful Pages release deployment');
-  const response = await fetch(`${config.siteUrl}/release.json`, { redirect: 'error', signal: AbortSignal.timeout(15000), headers: { 'Cache-Control': 'no-cache' } });
-  if (!response.ok) throw new Error('Pages deployed release marker unavailable');
-  const live = await response.json();
-  if (live.sha !== manifest.sha || live.environment !== environment) throw new Error('Pages deployed SHA/environment readiness mismatch');
+  await waitPagesMarker(config, manifest, releaseId);
+  step('pages-marker', { sha: manifest.sha });
   const deployments = await cf(config, `/workers/scripts/${config.workerName}/deployments`);
   const current = deployments.deployments?.[0];
   if (current?.versions?.length !== 1 || current.versions[0].percentage !== 100) throw new Error('Cannot identify fully deployed Worker version');
