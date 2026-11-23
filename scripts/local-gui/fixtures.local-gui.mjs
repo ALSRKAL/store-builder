@@ -19,11 +19,15 @@ export async function seedFixtures(mf, root, api) {
   for (const table of ['orders', 'payment_receipts', 'fcm_tokens', 'push_subscriptions', 'store_payment_methods', 'products', 'categories', 'stores',
     'usage', 'admins', 'trial_ledger', 'rate_limits']) await db.prepare(`DELETE FROM ${table}`).run();
   const now = new Date().toISOString();
+  // This paid owner is established, not a first-run account. SQLite's default
+  // datetime('now') has no zone and would trigger onboarding in UTC CI while
+  // appearing older in some developer browser timezones. Fresh trial accounts
+  // retain their real creation timestamps and exercise the onboarding UI.
   await db.prepare(`INSERT INTO admins(id,email,store_name,store_id,slug,whatsapp,
-    subscription_start,subscription_end,subscription_months,plan_id,is_trial,trial_used)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind('local-gui-owner', 'owner@example.test',
+    subscription_start,subscription_end,subscription_months,plan_id,is_trial,trial_used,created_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind('local-gui-owner', 'owner@example.test',
     'متجر تجريبي محلي', 'local-gui-shop', 'local-gui-shop', '0000000000',
-    now, '2099-01-01T00:00:00.000Z', 12, 'annual', 0, 1).run();
+    now, '2099-01-01T00:00:00.000Z', 12, 'annual', 0, 1, '2020-01-01T00:00:00.000Z').run();
   await db.prepare(`INSERT INTO admins(id,email,subscription_start,subscription_end,plan_id,is_trial,trial_used)
     VALUES(?,?,?,?,?,?,?)`).bind('local-gui-expired', 'expired@example.test',
     '2020-01-01T00:00:00.000Z', '2020-01-08T00:00:00.000Z', 'trial', 1, 1).run();

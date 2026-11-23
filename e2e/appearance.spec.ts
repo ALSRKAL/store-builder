@@ -1,8 +1,11 @@
-import { test, expect, login, noOverflow, settings, tab } from './fixtures';
+import { test, expect, login, noOverflow, settings, tab, snapshot } from './fixtures';
 
-test('responsive real App utility CSS and desktop/mobile navigation geometry', async ({ page }, info) => {
+test('responsive real App utility CSS and desktop/mobile navigation geometry', async ({ page, request, apiURL }, info) => {
+  const state = await snapshot(request, apiURL);
+  expect(state.admins.find((row: { email: string }) => row.email === 'owner@example.test').created_at).toBe('2020-01-01T00:00:00.000Z');
   await login(page);
   await expect(page).toHaveURL(/dashboard/);
+  await expect(page.getByRole('dialog', { name: 'جولة تعريفية' })).toHaveCount(0);
   const main = page.locator('main');
   await expect(main).toBeVisible();
   await expect.poll(() => main.evaluate(el => getComputedStyle(el).paddingLeft)).toBe(info.project.name === 'desktop' ? '24px' : '16px');

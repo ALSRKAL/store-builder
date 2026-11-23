@@ -38,6 +38,8 @@ async function guardContext(context: BrowserContext, app: string, api: string): 
 }
 type Fixtures = { apiURL: string; guard: Guard; customer: { context: BrowserContext; page: Page; guard: Guard } };
 export const test = base.extend<Fixtures>({
+  // Exercise the same browser timezone as CI, including real first-run onboarding.
+  timezoneId: 'UTC',
   apiURL: async ({ baseURL }, use) => {
     const production = new URL(baseURL!).port === (process.env.LOCAL_GUI_APP_PORT || '5192');
     await use(`http://127.0.0.1:${process.env.LOCAL_GUI_API_PORT || (production ? '8792' : '8791')}`);
