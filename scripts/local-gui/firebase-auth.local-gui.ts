@@ -41,6 +41,9 @@ window.addEventListener('storage', event => {
   if (event.key === LOCAL_GUI_STORAGE_KEY) change(storedUser());
 });
 export class GoogleAuthProvider {}
+export class EmailAuthProvider {
+  static credential(email: string, password: string) { return { email, password }; }
+}
 export const browserLocalPersistence = 'local-gui-only';
 export const getAuth = () => auth;
 export const setPersistence = async () => {};
@@ -69,3 +72,13 @@ export async function sendPasswordResetEmail(_auth: Auth, email: string) {
 }
 export async function getIdToken(user: User) { return user.getIdToken(); }
 export async function reload() {}
+export async function reauthenticateWithCredential(_user: User, credential: { email: string; password: string }) {
+  if (credential.password !== LOCAL_GUI_PASSWORD) {
+    throw Object.assign(new Error('LOCAL GUI wrong password'), { code: 'auth/wrong-password' });
+  }
+  return { user: auth.currentUser };
+}
+export async function updateEmail(_user: User, email: string) {
+  localGuiIdentity(email); // Validation only; the token identity follows the stored email.
+  change(makeUser(localGuiIdentity(email)));
+}
