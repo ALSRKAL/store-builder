@@ -138,7 +138,7 @@ export default function Header({ onSearch, selectedCategory, onCategoryChange, o
               type="button"
               onClick={onCartOpen}
               aria-label={`السلة، ${cartCount} عنصر`}
-              className="relative inline-flex size-11 items-center justify-center rounded-md border transition-colors"
+              className="relative inline-flex size-12 items-center justify-center rounded-md border transition-colors md:size-11"
               style={{
                 borderColor: isDarkHeader ? 'rgba(255,255,255,0.25)' : 'var(--store-border)',
                 color: 'var(--store-header-text)',
@@ -160,7 +160,7 @@ export default function Header({ onSearch, selectedCategory, onCategoryChange, o
               aria-label={searchOpen ? 'إغلاق البحث' : 'فتح البحث'}
               aria-expanded={searchOpen}
               className={cn(
-                'inline-flex size-11 items-center justify-center rounded-md border transition-colors md:hidden',
+                'inline-flex size-12 items-center justify-center rounded-md border transition-colors md:hidden',
                 searchOpen ? 'border-transparent' : '',
               )}
               style={{
@@ -181,7 +181,7 @@ export default function Header({ onSearch, selectedCategory, onCategoryChange, o
               aria-label={menuOpen ? 'إغلاق التصنيفات' : 'فتح التصنيفات'}
               aria-expanded={menuOpen}
               className={cn(
-                'inline-flex size-11 items-center justify-center rounded-md border transition-colors md:hidden',
+                'inline-flex size-12 items-center justify-center rounded-md border transition-colors md:hidden',
                 menuOpen ? 'border-transparent' : '',
               )}
               style={{

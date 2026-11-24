@@ -172,7 +172,7 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
         <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
           <dt className="pt-2 text-label text-fg-muted">اسم المتجر</dt>
           {editingName ? (
-            <dd className="m-0 flex flex-col gap-2">
+            <dd className="m-0 flex w-full flex-col gap-2">
               <div className="flex min-w-0 items-center gap-1.5">
                 <Label htmlFor="store-name" className="sr-only">اسم المتجر</Label>
                 <Input
@@ -206,8 +206,8 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
               </p>
             </dd>
           ) : (
-            <dd className="m-0 flex items-center gap-1">
-              <span className="truncate text-label font-medium text-foreground">{adminData?.storeName || '—'}</span>
+            <dd className="m-0 flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 truncate text-label font-medium text-foreground">{adminData?.storeName || '—'}</span>
               <Button type="button" size="iconSm" variant="ghost" aria-label="تعديل اسم المتجر" onClick={() => { setName(adminData?.storeName ?? ''); setEditingName(true); }}>
                 <Pencil className="size-4" strokeWidth={1.75} aria-hidden />
               </Button>
@@ -217,7 +217,7 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
         <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
           <dt className="pt-2 text-label text-fg-muted">وصف المتجر</dt>
           {editingDescription ? (
-            <dd className="m-0 flex flex-col gap-2">
+            <dd className="m-0 flex w-full flex-col gap-2">
               <Label htmlFor="store-description" className="sr-only">وصف المتجر</Label>
               <Textarea
                 id="store-description"
@@ -254,7 +254,7 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
               </p>
             </dd>
           ) : (
-            <dd className="m-0 flex items-start gap-1">
+            <dd className="m-0 flex items-start justify-between gap-2">
               <span className="min-w-0 flex-1 whitespace-pre-wrap text-label font-medium leading-relaxed text-foreground">
                 {adminData?.description || '—'}
               </span>
@@ -273,7 +273,7 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
         <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
           <dt className="pt-2 text-label text-fg-muted">البريد الإلكتروني</dt>
           {editingEmail ? (
-            <dd className="m-0 flex flex-col gap-2">
+            <dd className="m-0 flex w-full flex-col gap-2">
               <div className="flex min-w-0 items-center gap-1.5">
                 <Label htmlFor="store-email" className="sr-only">البريد الإلكتروني</Label>
                 <Input
@@ -319,8 +319,8 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
               </p>
             </dd>
           ) : (
-            <dd className="m-0 flex items-center gap-1">
-              <span className="truncate text-label font-medium text-foreground" dir="ltr">{adminData?.email || '—'}</span>
+            <dd className="m-0 flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 truncate text-label font-medium text-foreground" dir="ltr">{adminData?.email || '—'}</span>
               <Button type="button" size="iconSm" variant="ghost" aria-label="تعديل البريد الإلكتروني" onClick={() => { setEmail(adminData?.email ?? ''); setPassword(''); setEditingEmail(true); }}>
                 <Pencil className="size-4" strokeWidth={1.75} aria-hidden />
               </Button>
@@ -369,8 +369,8 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
               </Button>
             </dd>
           ) : (
-            <dd className="m-0 flex items-center gap-1">
-              <span className="text-label font-medium text-foreground" dir="ltr">{adminData?.whatsapp || '—'}</span>
+            <dd className="m-0 flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 text-label font-medium text-foreground" dir="ltr">{adminData?.whatsapp || '—'}</span>
               <Button
                 type="button"
                 size="iconSm"

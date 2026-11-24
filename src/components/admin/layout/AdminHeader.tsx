@@ -64,21 +64,21 @@ function AdminHeader(): React.JSX.Element {
       <button
         type="button"
         onClick={() => navigate('/admin/dashboard/products')}
-        className="flex min-w-0 items-center gap-2 lg:hidden"
+        className="flex min-h-11 min-w-0 items-center gap-2 rounded-md px-0.5 -ms-0.5 lg:hidden"
         aria-label="الانتقال إلى المنتجات"
       >
         {adminData?.logo ? (
           <img
             src={adminData.logo}
             alt=""
-            className="size-8 shrink-0 rounded-md border border-border object-cover"
+            className="size-9 shrink-0 rounded-md border border-border object-cover"
           />
         ) : (
           <span
             aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface-sunken text-fg-muted"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface-sunken text-fg-muted"
           >
-            <Store size={16} strokeWidth={1.75} />
+            <Store size={17} strokeWidth={1.75} />
           </span>
         )}
         <span className="truncate text-label font-semibold text-foreground">

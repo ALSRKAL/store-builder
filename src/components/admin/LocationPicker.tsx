@@ -227,7 +227,7 @@ export default function LocationPicker({ currentLocation, onSave, onClose }: Loc
         </div>
         <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-border bg-card px-4 py-3 sm:flex-row">
           <Button type="button" variant="outline" onClick={onClose} disabled={saving} className="sm:w-28">إلغاء</Button>
-          <Button type="button" className="flex-1 gap-2" disabled={saving} onClick={() => void save()}>{saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}{saving ? 'جاري الحفظ…' : 'حفظ الموقع'}</Button>
+          <Button type="button" className="min-h-11 w-full gap-2 sm:flex-1" disabled={saving} onClick={() => void save()}>{saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}{saving ? 'جاري الحفظ…' : 'حفظ الموقع'}</Button>
         </div>
       </DialogContent>
     </Dialog>

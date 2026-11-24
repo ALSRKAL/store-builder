@@ -461,7 +461,7 @@ export function PaymentMethodDialog({ open, editingMethod, onClose, onSaved }: P
             <Button type="button" variant="outline" onClick={onClose} disabled={saving} className="sm:w-28">
               إلغاء
             </Button>
-            <Button type="button" onClick={() => void save()} disabled={saving || qrUploading || !country} className="flex-1 gap-2">
+            <Button type="button" onClick={() => void save()} disabled={saving || qrUploading || !country} className="min-h-11 w-full gap-2 sm:flex-1">
               {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
               {saving ? 'جاري الحفظ…' : editingMethod ? 'حفظ التعديلات' : 'إضافة طريقة الدفع'}
             </Button>

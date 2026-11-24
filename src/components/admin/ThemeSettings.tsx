@@ -147,7 +147,7 @@ function ThemeSettings({ currentTheme, onSave, loading, storeCurrency = 'SAR' }:
             <RotateCcw className="size-4" strokeWidth={1.75} aria-hidden />
             إعادة تعيين
           </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={loading} className="flex-1 gap-2">
+          <Button type="button" onClick={() => void handleSave()} disabled={loading} className="min-h-11 w-full gap-2 sm:flex-1">
             <Save className="size-4" strokeWidth={1.75} aria-hidden />
             {loading ? 'جاري الحفظ…' : 'حفظ التغييرات'}
           </Button>

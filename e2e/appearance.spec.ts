@@ -17,8 +17,34 @@ test('responsive real App utility CSS and desktop/mobile navigation geometry', a
   if (info.project.name === 'desktop') expect(navBox!.width).toBeGreaterThan(200);
   else expect(navBox!.y + navBox!.height).toBeCloseTo(page.viewportSize()!.height, 0);
   await noOverflow(page);
+  if (info.project.name === 'mobile') {
+    await settings(page, 'معلومات المتجر');
+    await expect(page.getByRole('heading', { name: 'المتجر والهوية' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'الطلبات والدفع' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'الحساب والتطبيق' })).toBeVisible();
+    const copyButton = page.getByRole('button', { name: 'نسخ الرابط', exact: true }).filter({ visible: true });
+    const openLink = page.getByRole('link', { name: 'فتح المتجر', exact: true }).filter({ visible: true });
+    const brandButton = page.getByRole('button', { name: 'الانتقال إلى المنتجات', exact: true }).filter({ visible: true });
+    for (const control of [copyButton, openLink, brandButton]) {
+      await expect(control).toBeVisible();
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.getByRole('button', { name: 'تعديل اسم المتجر' }).click();
+    await noOverflow(page);
+    await page.getByRole('button', { name: 'إلغاء تعديل الاسم' }).click();
+  }
   await page.goto('/store/local-gui-shop');
   await expect(page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ })).toBeVisible();
+  if (info.project.name === 'mobile') {
+    const mobileAdd = page.getByRole('button', { name: 'أضف منتج تجريبي أول إلى السلة', exact: true }).filter({ visible: true }).first();
+    await expect(mobileAdd).toBeVisible();
+    expect((await mobileAdd.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for (const name of [/فتح البحث/, /فتح التصنيفات/, /السلة،/]) {
+      const control = page.getByRole('button', { name }).filter({ visible: true }).first();
+      await expect(control).toBeVisible();
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+  }
   const grid = page.locator('main .grid').filter({ has: page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }) }).last();
   await expect.poll(() => grid.evaluate(el => getComputedStyle(el).display)).toBe('grid');
   const card = page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ });

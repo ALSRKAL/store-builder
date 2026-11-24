@@ -37,12 +37,12 @@ export function SubscriptionSection({
         </p>
       </div>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <Button type="button" variant="outline" onClick={onRenew} className="flex-1 gap-2">
+        <Button type="button" variant="outline" onClick={onRenew} className="min-h-11 w-full gap-2 sm:flex-1">
           <Key className="size-4" strokeWidth={1.75} aria-hidden />
           تجديد بالكود
         </Button>
         {!hideUpgradeUI ? (
-          <Button type="button" onClick={onUpgrade} className="flex-1 gap-2">
+          <Button type="button" onClick={onUpgrade} className="min-h-11 w-full gap-2 sm:flex-1">
             <RefreshCw className="size-4" strokeWidth={1.75} aria-hidden />
             ترقية الخطة
           </Button>

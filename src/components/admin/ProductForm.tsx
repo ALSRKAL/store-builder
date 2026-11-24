@@ -529,7 +529,7 @@ function ProductForm({ product, categories, onSave, onClose }: ProductFormProps)
             <Button type="button" variant="outline" className="sm:w-32" onClick={onClose} disabled={loading}>
               إلغاء
             </Button>
-            <Button type="submit" className="flex-1 gap-2" disabled={loading}>
+            <Button type="submit" className="min-h-11 w-full gap-2 sm:flex-1" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="size-4 animate-spin" aria-hidden />

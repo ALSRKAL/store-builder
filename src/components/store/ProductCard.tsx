@@ -109,7 +109,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps): Rea
           <button
             type="button"
             aria-label={`أضف ${product.name} إلى السلة`}
-            className="absolute bottom-2 start-2 z-[2] flex size-11 items-center justify-center rounded-[var(--store-button-radius,4px)] text-[var(--store-button-text)] transition-opacity hover:opacity-90"
+            className="absolute bottom-2 start-2 z-[2] flex size-11 items-center justify-center rounded-[var(--store-button-radius,4px)] text-[var(--store-button-text)] transition-opacity hover:opacity-90 max-sm:hidden"
             style={{ backgroundColor: addedToCart ? 'var(--success)' : 'var(--store-primary)' }}
             onClick={quickAdd}
           >
@@ -171,6 +171,19 @@ export default function ProductCard({ product, onClick }: ProductCardProps): Rea
             </span>
           ) : null}
         </div>
+
+        {!outOfStock ? (
+          <button
+            type="button"
+            aria-label={`أضف ${product.name} إلى السلة`}
+            className="relative z-[2] mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--store-button-radius,4px)] px-3 text-label font-medium text-[var(--store-button-text)] transition-opacity hover:opacity-90 sm:hidden"
+            style={{ backgroundColor: addedToCart ? 'var(--success)' : 'var(--store-primary)' }}
+            onClick={quickAdd}
+          >
+            {addedToCart ? <Check className="size-4" strokeWidth={2} aria-hidden /> : <ShoppingCart className="size-4" strokeWidth={1.75} aria-hidden />}
+            {hasVariants ? 'اختر الخيارات' : addedToCart ? 'تمت الإضافة' : 'أضف إلى السلة'}
+          </button>
+        ) : null}
       </div>
     </article>
   );

@@ -109,3 +109,20 @@ Scale (Tailwind):
 - Cart is reachable from the header. No floating cart blob.
 - Photos are never covered by decorative gradients. Story captions use a solid
   scrim bar for legibility.
+
+## Mobile controls (audit 2026-11-24)
+
+- Controls stay at 44px minimum. Storefront header actions use 48px on phones;
+  product quick-add becomes a full-width labelled 44px action on phone cards
+  (the desktop icon-only overlay remains).
+- Never put `flex-1` on a button inside a `flex-col` stack: flex-basis 0 collapses
+  the button's height. Use `w-full min-h-11` for phone stacks and `sm:flex-1`
+  only when the container becomes a row.
+- Admin settings are grouped into three ruled groups: المتجر والهوية، الطلبات
+  والدفع، الحساب والتطبيق. Accordion content removes the 28px start inset on
+  phones so rows use the full content width.
+- Store identity rows align label, value and edit action on one consistent
+  grid; edit actions are 44px and never float without the value beside them.
+- Bottom navigation keeps `pb-24` content clearance and 60px targets.
+- The mobile pass is verified by geometry assertions in `e2e/appearance.spec.ts`
+  (target sizes, no horizontal overflow, grouped headings, no collapsed buttons).

@@ -58,7 +58,7 @@ export const AccordionItem = memo(function AccordionItem({
             transition={motionTransition.fast}
             className="overflow-hidden"
           >
-            <div className="px-1 pb-6 ps-7">{children}</div>
+            <div className="px-0 pb-6 sm:px-1 sm:ps-7">{children}</div>
           </motion.div>
         ) : null}
       </AnimatePresence>

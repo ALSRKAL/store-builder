@@ -31,6 +31,7 @@ import NotificationSettings from './NotificationSettings';
 import LocationPicker from './LocationPicker';
 import { Button } from '../ui';
 import { useAuth } from '../../contexts/AuthContext';
+import { cn } from '../../lib/utils';
 import { FeatureGateCard, UpgradeDialog, type RenewalSuccessData } from './subscription';
 import { AccordionItem } from './settings/AccordionItem';
 import { StoreStatusCard } from './settings/StoreStatusCard';
@@ -89,12 +90,21 @@ interface SettingsTabProps {
   isAnnualPlan?: boolean;
 }
 
+type SectionGroup = 'store' | 'operations' | 'account';
+
 interface SectionConfig {
   key: SectionKey;
+  group: SectionGroup;
   icon: LucideIcon;
   title: string;
   badge?: string | null;
 }
+
+const SECTION_GROUPS: { key: SectionGroup; label: string }[] = [
+  { key: 'store', label: 'المتجر والهوية' },
+  { key: 'operations', label: 'الطلبات والدفع' },
+  { key: 'account', label: 'الحساب والتطبيق' },
+];
 
 function SettingsTab({
   adminData,
@@ -189,16 +199,16 @@ function SettingsTab({
   const upgrade = (): void => setDialog(hideUpgradeUI ? null : 'plans');
 
   const sections: SectionConfig[] = [
-    { key: 'info', icon: Store, title: 'معلومات المتجر' },
-    { key: 'announcement', icon: Megaphone, title: 'الشريط الإعلاني', badge: storeAnnouncement?.enabled ? 'مفعّل' : null },
-    { key: 'social', icon: Share2, title: 'التواصل الاجتماعي', badge: isAnnualPlan ? (storeSocialLinks?.enabled ? 'مفعّل' : null) : 'سنوي' },
-    { key: 'notifications', icon: Bell, title: 'الإشعارات الفورية', badge: isAnnualPlan ? null : 'سنوي' },
-    { key: 'payments', icon: CreditCard, title: 'طرق الدفع', badge: isAnnualPlan ? null : 'سنوي' },
-    { key: 'subscription', icon: RefreshCw, title: 'الاشتراك', badge: `${daysLeft} يوم` },
-    { key: 'location', icon: MapPin, title: 'موقع المتجر', badge: storeLocation?.lat ? (storeLocation.enabled !== false ? 'مفعّل' : 'معطّل') : null },
-    { key: 'currency', icon: Coins, title: 'العملة', badge: storeCurrency },
-    { key: 'tour', icon: PlayCircle, title: 'العرض التعليمي' },
-    { key: 'app', icon: Smartphone, title: 'حوّل متجرك لتطبيق' },
+    { key: 'info', group: 'store', icon: Store, title: 'معلومات المتجر' },
+    { key: 'announcement', group: 'store', icon: Megaphone, title: 'الشريط الإعلاني', badge: storeAnnouncement?.enabled ? 'مفعّل' : null },
+    { key: 'social', group: 'store', icon: Share2, title: 'التواصل الاجتماعي', badge: isAnnualPlan ? (storeSocialLinks?.enabled ? 'مفعّل' : null) : 'سنوي' },
+    { key: 'location', group: 'store', icon: MapPin, title: 'موقع المتجر', badge: storeLocation?.lat ? (storeLocation.enabled !== false ? 'مفعّل' : 'معطّل') : null },
+    { key: 'currency', group: 'store', icon: Coins, title: 'العملة', badge: storeCurrency },
+    { key: 'payments', group: 'operations', icon: CreditCard, title: 'طرق الدفع', badge: isAnnualPlan ? null : 'سنوي' },
+    { key: 'notifications', group: 'operations', icon: Bell, title: 'الإشعارات الفورية', badge: isAnnualPlan ? null : 'سنوي' },
+    { key: 'subscription', group: 'account', icon: RefreshCw, title: 'الاشتراك', badge: daysLeft > 365 ? `${Math.ceil(daysLeft / 365)} سنة` : `${daysLeft} يوم` },
+    { key: 'app', group: 'account', icon: Smartphone, title: 'حوّل متجرك لتطبيق' },
+    { key: 'tour', group: 'account', icon: PlayCircle, title: 'العرض التعليمي' },
   ];
 
   const annualGate = (description: string): React.JSX.Element => (
@@ -220,20 +230,28 @@ function SettingsTab({
         onAddProduct={() => onNavigate?.('products')}
       />
 
-      <div className="border-t border-border">
-        {sections.map((section) => {
+      <div className="flex flex-col">
+        {sections.map((section, index) => {
           const isOpen = expanded === section.key;
+          const startsGroup = index === 0 || sections[index - 1]?.group !== section.group;
+          const groupLabel = SECTION_GROUPS.find((group) => group.key === section.group)?.label;
           return (
-            <AccordionItem
-              key={section.key}
-              id={section.key}
-              icon={section.icon}
-              title={section.title}
-              badge={section.badge}
-              expanded={isOpen}
-              onToggle={() => toggle(section.key)}
-              sectionRef={getRef(section.key)}
-            >
+            <div key={section.key}>
+              {startsGroup ? (
+                <h2 className={cn('flex items-center gap-2 px-1 pb-1.5 text-[11px] font-semibold tracking-wide text-fg-subtle', index === 0 ? '' : 'mt-4')}>
+                  <span aria-hidden className="h-px flex-1 bg-border" />
+                  {groupLabel}
+                </h2>
+              ) : null}
+              <AccordionItem
+                id={section.key}
+                icon={section.icon}
+                title={section.title}
+                badge={section.badge}
+                expanded={isOpen}
+                onToggle={() => toggle(section.key)}
+                sectionRef={getRef(section.key)}
+              >
               {section.key === 'info' ? (
                 <StoreInfoSection adminData={adminData} onUpdateStoreInfo={onUpdateStoreInfo} />
               ) : null}
@@ -304,7 +322,8 @@ function SettingsTab({
               {section.key === 'tour' ? <TourSection onShowTour={onShowTour} /> : null}
 
               {section.key === 'app' ? <AppSection storeName={adminData?.storeName} /> : null}
-            </AccordionItem>
+              </AccordionItem>
+            </div>
           );
         })}
       </div>

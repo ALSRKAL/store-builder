@@ -283,7 +283,7 @@ export default function AnnouncementSettings({ announcement, onSave, saving = fa
           <RotateCcw className="size-4" aria-hidden />
           إعادة تعيين
         </Button>
-        <Button type="button" onClick={() => void onSave(settings)} disabled={saving || !hasChanges} className="flex-1 gap-2">
+        <Button type="button" onClick={() => void onSave(settings)} disabled={saving || !hasChanges} className="min-h-11 w-full gap-2 sm:flex-1">
           <Check className="size-4" aria-hidden />
           {saving ? 'جاري الحفظ…' : 'حفظ التغييرات'}
         </Button>

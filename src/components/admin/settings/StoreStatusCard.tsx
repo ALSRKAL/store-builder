@@ -69,11 +69,11 @@ export function StoreStatusCard({ ready, active = true, storeUrl, onAddProduct }
       </div>
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-        <Button type="button" variant="outline" onClick={() => void copy()} className="flex-1 gap-2">
+        <Button type="button" variant="outline" onClick={() => void copy()} className="min-h-11 w-full gap-2 sm:flex-1">
           {copied ? <Check className="size-4" strokeWidth={1.75} aria-hidden /> : <Copy className="size-4" strokeWidth={1.75} aria-hidden />}
           {copied ? 'تم النسخ' : 'نسخ الرابط'}
         </Button>
-        <Button asChild className="flex-1 gap-2">
+        <Button asChild className="min-h-11 w-full gap-2 sm:flex-1">
           <a href={storeUrl} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="size-4" strokeWidth={1.75} aria-hidden />
             فتح المتجر
