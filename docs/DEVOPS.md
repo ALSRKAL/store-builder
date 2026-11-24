@@ -125,6 +125,7 @@ Token يكون محدود الحساب والصلاحيات اللازمة لـW
 - `0001_baseline.sql`: البنية الأساسية كاملة.
 - `0002_store_revisions.sql`: revisions والـtriggers.
 - `0003_trial_ledger.sql`: تاريخ استعمال التجربة الدائم.
+- `0004_store_description.sql`: وصف المتجر القابل للتعديل لميتا المشاركة وSEO.
 
 manifest يحفظ SHA256. التاريخ مستقل `app_schema_migrations` ولا يخلط مع `d1_migrations` القديمة. لا تعدّل migration سبق اعتماده. SQL الحذفي والتجارب العامة/trigger غير المراجع محظورة؛ إضافة trigger جديدة تحتاج مراجعة سياسة واضحة، وليس تحديث manifest وحده.
 
@@ -150,7 +151,7 @@ node scripts/db/migrations.mjs materialize --inventory inventory.json --plan app
 
 هذه الأوامر محلية لا تنفذ remote SQL. نفّذ batches فقط ضمن عملية منفصلة مصرح بها على DB التي يطابقها inventory وبعد مراجعة البيانات؛ إعادة الفحص واجبة إذا تغير schema/history/target.
 
-للنسخ الصغيرة فقط يوجد transport اختياري في Secrets: `DB_ADOPTION_PROOF_JSON` و`DB_ADOPTION_BACKUP_BASE64`، مع تحقق من bytes/hash. GitHub Secret حدّه 48KB؛ backup كبير **لا يُضغط داخل هذه الآلية**. الأفضل اعتماد قاعدة الإنتاج الكبيرة يدويًا بشكل آمن قبل pipeline. لا ترفع backup أو proof أو captures الحساسة كـartifacts عامة، ولا تحفظها في Git.
+يوجد transport اختياري في Secrets للـadoption: `DB_ADOPTION_PROOF_JSON` مع `DB_ADOPTION_BACKUP_BASE64` (نسخ صغيرة) أو أجزاء `DB_ADOPTION_BACKUP_BASE64_1..8` المتصلة بالترتيب. GitHub Secret حدّه 48KB لكل سر؛ تحقّق `cli.mjs` من bytes/hash قبل أي كتابة. استُخدمت 7 أجزاء لنسخة الإنتاج الأولية (210KB) ثم حُذفت أسرار الـadoption بعد نجاح الترحيل لأن production أصبح managed. لا ترفع backup أو proof أو captures الحساسة كـartifacts عامة، ولا تحفظها في Git.
 
 Time Travel bookmark مرجع استعادة وليس نسخة SQL؛ الإصدار يلتقطه ويتوقف إذا لم يوجد. الاستعادة لها أثر على البيانات وتحتاج قرارًا بشريًا؛ لا تلقائية.
 
@@ -201,23 +202,30 @@ workflow يعطي نتيجة وإخفاقًا في GitHub؛ لا توجد قنا
 
 قرار Firebase: أصبح staging منفصلًا بالكامل عن الإنتاج، بما في ذلك Firebase Auth. VAPID والإعداد العام في `.secrets/staging-firebase.env`، وحساب خدمة Firebase Admin/FCM في `.secrets/firebase-staging-service-account.json` (كلاهما مستثنى من Git). لا توجد مشاركة لمجمع مستخدمي الإنتاج.
 
-### المتبقي قبل الإنتاج
-1. **بوابة الموافقة:** المستودع أصبح عامًا، وأُضيف `alsrkal2` كـRequired Reviewer لبيئة `production` مع `prevent_self_review=true` و`can_admins_bypass=false`، وفُعّل `PRODUCTION_APPROVAL_CONFIGURED=true`.
-2. **D1 الإنتاج:** ليس فارغًا. الفحص القراءة فقط وجد غياب `admins.trial_used` وغياب `error_logs` و`rate_limits` و`store_revisions` و`store_slug_aliases` و`trial_ledger` وmanaged history. يلزم قبل الترحيل: نسخة قابلة للاستعادة، ثم `ALTER TABLE admins ADD COLUMN trial_used INTEGER DEFAULT 0` (توافق إضافي مراجع)، ثم خطة adoption/proof والتحقق من invariants. لا تُنفّذ هذه الكتابة دون نسخة احتياطية ومراجعة.
+### الإنتاج المنشور
+- **آخر نشر إنتاجي:** `475c6cd6befdd01516e3d0650dfd86e7384da8d4` عبر release `45349810680`، بعد موافقة `alsrkal2` على بيئة `production`.
+- **D1:** history يحتوي `0001 adopted` ثم `0002/0003/0004 applied`، وكل invariants (`foreignKeys/revisionCoverage/aliasCoverage/trialCoverage`) = 0 عند التحقق.
+- **العرض الاجتماعي:** `pages/_worker.js` يقرأ بيانات المتجر من API ويعيد كتابة title/description/OG/Twitter/JSON-LD/canonical قبل وصول بوتات المشاركة. كما يخدم `robots.txt` و`sitemap.xml` الصحيحين لكل بيئة. اختُبر على staging بـ12/12 ثم على production بطلب crawler حقيقي.
+- **الشعارات:** الرفع الجديد PNG؛ وحُوّلت شعارات WebP القائمة إلى PNG في R2 مع مزامنة `stores.logo` و`admins.logo`.
 
-### خطوات ترحيل الإنتاج الأول (مُراجعة ومحاكاة محليًا)
-
-على نسخة محلية من نسخة الإنتاج الاحتياطية، نجحت الخطوات التالية وأعادت `foreignKeys/revisionCoverage/aliasCoverage/trialCoverage = 0`:
+### خطوات ترحيل الإنتاج الأول (اكتملت)
+هذه الخطوات نُفّذت مرة واحدة على الإنتاج بعد backup + Time Travel، ثم حُذفت أسرار الـadoption وبقي الإنتاج managed:
 
 1. `ALTER TABLE admins ADD COLUMN trial_used INTEGER DEFAULT 0;`
 2. تطبيق `workers/migrations-managed/0001_baseline.sql` (كله `IF NOT EXISTS`) لإنشاء `rate_limits` و`error_logs` والفهارس/triggers الناقصة.
-3. `DELETE FROM usage WHERE user_id NOT IN (SELECT id FROM admins);` — يحذف صف usage يتيمًا واحدًا كان يفشل `PRAGMA foreign_key_check`.
-4. بعد ذلك يصبح المخطط مطابقًا لـmanifest baseline (مع اختلاف ترتيب أعمدة فقط، يقبله فحص `schemaCompatible` الجديد)، ثم يُطبَّق proof/adoption ثم 0002/0003.
+3. `DELETE FROM usage WHERE user_id NOT IN (SELECT id FROM admins);` — صف usage يتيم واحد كان يفشل `PRAGMA foreign_key_check`.
+4. proof/adoption ثم تطبيق 0002 و0003، وبعد نشر الميزة تطبيق 0004.
 
-نسخة الإنتاج الحالية 210KB، وbase64 لها نحو 281KB > حد GitHub 48KB للسر الواحد؛ لذلك يدعم `cli.mjs` الآن `DB_ADOPTION_BACKUP_BASE64_1..8` (أجزاء متصلة بالترتيب) إضافة إلى المتغير المفرد للنسخ الصغيرة.
+نسخة الإنتاج الأولية كانت 210KB؛ قُسّمت base64 إلى 7 أسرار `DB_ADOPTION_BACKUP_BASE64_1..7` (كل جزء <48KB). لا تُعاد هذه الأسرار؛ أي schema لاحق يُطبَّق كـmanaged migration.
 
 
-تظهر نتائج التشغيل الفعلية في تبويب Actions للمستودع؛ نجاح CI لا يعني نشرًا حيًا ناجحًا. ملفات النسخ الاحتياطية وcaptures لا تحفظ في Git ولا ترفع علنًا.
+### متبقي تشغيلي (غير مانع للنشر)
+- تدوير توكن Cloudflare الذي ظهر في محادثة سابقة بعد التأكد من عمل البديل الجديد.
+- اختبار معاينة واتساب/Facebook Debugger برابط حقيقي من متجر؛ فحص HTML للبوت لا يثبت شكل البطاقة النهائي.
+- صفحات المنتج (`/store/:slug/product/:id`) ما زالت تعرض ميتا عامة للبوتات؛ المتجر نفسه مغطى. يمكن إضافة meta للمنتج لاحقًا.
+- ربط دومين مخصص اختياري؛ `_worker.js` يستخدم origin الطلب فلا يتأثر بتغيير الدومين.
+
+
 
 التغطية العامة بداية منخفضة (قرابة 15% lines في أول قياس)؛ المسارات الحساسة لها اختبارات وحدة/SQLite ومتصفح، لكن لا تدّعي هذه المنظومة أن كل صفحة مختبرة. زد الاختبارات عند أي ميزة جديدة.
 
