@@ -15,6 +15,11 @@ export async function seedFixtures(mf, root, api) {
       catch (error) { throw new Error(`${file}: ${error.message}`, { cause: error }); }
     }
   }
+  // Local GUI resets rerun this seed on the same in-memory DB; ALTER is not idempotent.
+  const storeColumns = await db.prepare("SELECT name FROM pragma_table_info('stores')").all();
+  if (!storeColumns.results.some(column => column.name === 'description')) {
+    await db.prepare('ALTER TABLE stores ADD COLUMN description TEXT').run();
+  }
   // Always deterministic, throwaway DB only; no on-disk D1/R2 or deployment config.
   for (const table of ['orders', 'payment_receipts', 'fcm_tokens', 'push_subscriptions', 'store_payment_methods', 'products', 'categories', 'stores',
     'usage', 'admins', 'trial_ledger', 'rate_limits']) await db.prepare(`DELETE FROM ${table}`).run();
