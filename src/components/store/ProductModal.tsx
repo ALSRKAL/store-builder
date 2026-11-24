@@ -355,7 +355,7 @@ export default function ProductModal({ product, onClose }: ProductModalProps): R
                   disabled={outOfStock}
                   onClick={add}
                   className={cn(
-                    'flex h-12 flex-1 items-center justify-center gap-2 text-label font-medium transition-opacity',
+                    'flex min-h-12 w-full items-center justify-center gap-2 text-label font-medium transition-opacity sm:w-auto sm:flex-1',
                     outOfStock ? 'cursor-not-allowed bg-muted text-fg-subtle' : 'text-[var(--store-button-text)] hover:opacity-90',
                   )}
                   style={
@@ -375,7 +375,7 @@ export default function ProductModal({ product, onClose }: ProductModalProps): R
                   disabled={outOfStock || paymentsPending}
                   aria-busy={paymentsPending || undefined}
                   onClick={order}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 bg-success text-label font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-fg-subtle"
+                  className="flex min-h-12 w-full items-center justify-center gap-2 bg-success text-label font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-fg-subtle sm:w-auto sm:flex-1"
                   style={{ borderRadius: 'var(--store-button-radius, 4px)' }}
                 >
                   <MessageCircle className="size-5" strokeWidth={1.75} aria-hidden />

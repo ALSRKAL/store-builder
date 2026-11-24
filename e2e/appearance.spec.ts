@@ -44,6 +44,13 @@ test('responsive real App utility CSS and desktop/mobile navigation geometry', a
       await expect(control).toBeVisible();
       expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
+    await page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }).first().click();
+    for (const name of ['أضف للسلة', 'اطلب الآن']) {
+      const control = page.getByRole('button', { name, exact: true }).filter({ visible: true }).first();
+      await expect(control).toBeVisible();
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.keyboard.press('Escape');
   }
   const grid = page.locator('main .grid').filter({ has: page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }) }).last();
   await expect.poll(() => grid.evaluate(el => getComputedStyle(el).display)).toBe('grid');
