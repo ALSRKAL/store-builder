@@ -97,7 +97,7 @@ export function workerConfig(config, root, main) {
     r2_buckets: [{ binding: 'R2_BUCKET', bucket_name: config.r2.bucket }],
     durable_objects: { bindings: [{ name: 'STORE_REALTIME', class_name: 'StoreRealtime' }] },
     migrations: [{ tag: config.durableObject.migrationTag, new_sqlite_classes: ['StoreRealtime'] }],
-    vars: { ENVIRONMENT: config.environment, FIREBASE_PROJECT_ID: config.firebase.projectId, FCM_PROJECT_ID: config.firebase.projectId, R2_PUBLIC_URL: config.r2PublicUrl },
+    vars: { ENVIRONMENT: config.environment, FIREBASE_PROJECT_ID: config.firebase.projectId, FCM_PROJECT_ID: config.firebase.projectId, R2_PUBLIC_URL: config.r2PublicUrl, SITE_URL: config.siteUrl, API_URL: config.apiUrl },
     ...(main ? { no_bundle: true, find_additional_modules: true, rules: [
       { type: 'ESModule', globs: ['**/*.js', '**/*.mjs'], fallthrough: true },
       { type: 'CompiledWasm', globs: ['**/*.wasm'], fallthrough: true },
@@ -109,7 +109,7 @@ export function workerConfig(config, root, main) {
 export function buildEnv(config, env = process.env) {
   // Vite public configuration only. Do not leak cloud credentials to build subprocesses.
   const clean = Object.fromEntries(Object.entries(env).filter(([key]) => !/TOKEN|SECRET|PASSWORD|PRIVATE_KEY|ADOPTION|^VITE_|RELEASE_.*CONFIG/.test(key)));
-  return { ...clean, STORE_ISOLATED_BUILD: 'true', VITE_API_URL: config.apiUrl, VITE_R2_PUBLIC_URL: config.r2PublicUrl,
+  return { ...clean, STORE_ISOLATED_BUILD: 'true', VITE_API_URL: config.apiUrl, VITE_SITE_URL: config.siteUrl, VITE_R2_PUBLIC_URL: config.r2PublicUrl,
     ...Object.fromEntries(Object.entries(config.firebase).map(([key, value]) => [`VITE_FIREBASE_${key.replace(/[A-Z]/g, letter => `_${letter}`).toUpperCase()}`, value])) };
 }
 export function redactError(value, env = process.env, limit = 1800) {

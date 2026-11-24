@@ -44,6 +44,7 @@ import { TourSection } from './settings/TourSection';
 interface AdminData {
   uid?: string;
   storeName?: string;
+  description?: string;
   email?: string;
   whatsapp?: string;
   logo?: string;
@@ -72,7 +73,7 @@ interface SettingsTabProps {
   storeLocation?: LocationData | null;
   onSaveLocation: (location: LocationData) => void | Promise<void>;
   onToggleLocationVisibility: () => Promise<void>;
-  onUpdateStoreInfo: (data: { name?: string; email?: string; password?: string; whatsapp?: string; logoFile?: File }) => Promise<void>;
+  onUpdateStoreInfo: (data: { name?: string; description?: string; email?: string; password?: string; whatsapp?: string; logoFile?: File }) => Promise<void>;
   storeAnnouncement?: AnnouncementData | null;
   onSaveAnnouncement: (data: AnnouncementData) => Promise<void>;
   storeSocialLinks?: SocialLinksData | null;

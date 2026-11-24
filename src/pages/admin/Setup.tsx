@@ -98,8 +98,9 @@ function Setup(): React.JSX.Element {
         folder: `stores/${user?.uid}/logo`,
         maxWidth: 500,
         maxHeight: 500,
-        quality: 0.9,
-        maxSizeMB: 0.5,
+        quality: 0.95,
+        maxSizeMB: 1,
+        outputFormat: 'png',
       });
       return result?.url ?? null;
     } catch {

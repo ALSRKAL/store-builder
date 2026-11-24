@@ -16,6 +16,11 @@
       "id": "0003",
       "file": "0003_trial_ledger.sql",
       "sha256": "620f615b2b874a095b3cad2893bf239535650dea1ee5b9637f1738cb9af65ed8"
+    },
+    {
+      "id": "0004",
+      "file": "0004_store_description.sql",
+      "sha256": "37f2f96197b6e7305524533c174459ff7148d42bd92e8334446123e31f192e18"
     }
   ]
 }

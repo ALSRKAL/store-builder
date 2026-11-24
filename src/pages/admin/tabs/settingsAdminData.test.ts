@@ -7,6 +7,7 @@ describe('buildSettingsAdminData', () => {
       id: 'owner-1',
       email: 'merchant@example.test',
       storeName: 'متجر جديد',
+      description: 'وصف المتجر',
       storeId: 'old-domain',
       slug: 'new-domain',
       whatsapp: '967777123456',
@@ -14,6 +15,7 @@ describe('buildSettingsAdminData', () => {
     }, 'owner-1')).toEqual({
       uid: 'owner-1',
       storeName: 'متجر جديد',
+      description: 'وصف المتجر',
       email: 'merchant@example.test',
       whatsapp: '967777123456',
       storeId: 'old-domain',

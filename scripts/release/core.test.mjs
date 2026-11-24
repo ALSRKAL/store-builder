@@ -75,12 +75,15 @@ test('generated Worker config includes all binding identities and initial SQLite
   assert.equal(generated.durable_objects.bindings[0].name, 'STORE_REALTIME');
   assert.deepEqual(generated.migrations[0].new_sqlite_classes, ['StoreRealtime']);
   assert.equal(generated.vars.FIREBASE_PROJECT_ID, 'store-stage');
+  assert.equal(generated.vars.SITE_URL, 'https://store-stage.example.com');
+  assert.equal(generated.vars.API_URL, 'https://store-stage-api.example.com');
   assert.equal(generated.d1_databases[0].migrations_dir, undefined, 'never discover/apply old migration directory');
 });
 
 test('build gets exact public environment configuration, never cloud/private credentials', () => {
   const env = buildEnv(config('staging'), { PATH: '/bin', CLOUDFLARE_API_TOKEN: 'secret', GITHUB_TOKEN: 'secret', WORKER_SECRETS_JSON: 'secret', FCM_PRIVATE_KEY: 'secret', VITE_API_URL: 'https://production.invalid' });
   assert.equal(env.VITE_API_URL, 'https://store-stage-api.example.com');
+  assert.equal(env.VITE_SITE_URL, 'https://store-stage.example.com');
   assert.equal(env.VITE_FIREBASE_PROJECT_ID, 'store-stage');
   for (const key of ['CLOUDFLARE_API_TOKEN', 'GITHUB_TOKEN', 'WORKER_SECRETS_JSON', 'FCM_PRIVATE_KEY']) assert.equal(env[key], undefined);
 });

@@ -11,6 +11,7 @@ interface DBAdmin {
   id: string;
   email: string;
   store_name: string | null;
+  store_description: string | null;
   store_id: string | null;
   slug: string | null;
   whatsapp: string | null;
@@ -144,6 +145,15 @@ export async function getAdminProfile(env: Env, userId: string, userEmail?: stri
         admin.email = normalizedEmail;
       } catch {
         // Another profile already owns the new address; surface the stored email.
+      }
+    }
+
+    if (admin?.store_id) {
+      try {
+        const storeRow = await env.DB.prepare(`SELECT description FROM stores WHERE id = ?`).bind(admin.store_id).first<{ description: string | null }>();
+        admin.store_description = storeRow?.description ?? null;
+      } catch {
+        // Pre-0004 databases have no description column; keep the profile usable.
       }
     }
 
@@ -360,7 +370,7 @@ async function getGlobalStats(env: Env): Promise<Response> {
 
 function formatAdmin(admin: DBAdmin) {
   return {
-    id: admin.id, email: admin.email, storeName: admin.store_name, storeId: admin.store_id,
+    id: admin.id, email: admin.email, storeName: admin.store_name, storeId: admin.store_id, description: admin.store_description ?? null,
     slug: admin.slug, whatsapp: admin.whatsapp, whatsappApiKey: admin.whatsapp_api_key || null,
     logo: admin.logo, subscriptionCode: admin.subscription_code, subscriptionStart: admin.subscription_start,
     subscriptionEnd: admin.subscription_end, subscriptionMonths: admin.subscription_months,

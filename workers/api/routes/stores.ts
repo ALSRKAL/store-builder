@@ -11,6 +11,7 @@ const RESERVED_SLUGS = new Set(['demo', 'admin', 'api', 'www', 'store', 'assets'
 
 interface StoreInput {
   name?: string;
+  description?: string;
   slug?: string;
   whatsapp?: string;
   logo?: string;
@@ -22,6 +23,7 @@ interface FormattedStore {
   id: string;
   slug: string;
   name: string;
+  description: string | null;
   whatsapp: string | null;
   logo: string | null;
   ownerId: string;
@@ -137,10 +139,13 @@ async function getStoreById(env: Env, storeId: string, userId: string): Promise<
 
 async function createStore(env: Env, userId: string, data: StoreInput): Promise<Response> {
   try {
-    const { name, slug, whatsapp, logo } = data;
+    const { name, slug, whatsapp, logo, description } = data;
 
     if (!name || !slug) {
       return errorResponse('Name and slug are required', 400);
+    }
+    if (description !== undefined && (typeof description !== 'string' || description.trim().length > 300)) {
+      return errorResponse('وصف المتجر طويل جداً (300 حرف كحد أقصى)', 400);
     }
 
     const existing = await env.DB.prepare(`
@@ -155,9 +160,9 @@ async function createStore(env: Env, userId: string, data: StoreInput): Promise<
     const timestamp = now();
 
     await env.DB.prepare(`
-      INSERT INTO stores (id, slug, name, whatsapp, logo, owner_id, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-    `).bind(storeId, slug, name, whatsapp || null, logo || null, userId, timestamp, timestamp).run();
+      INSERT INTO stores (id, slug, name, description, whatsapp, logo, owner_id, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    `).bind(storeId, slug, name, description?.trim() || null, whatsapp || null, logo || null, userId, timestamp, timestamp).run();
 
     await env.DB.prepare(`
       UPDATE admins SET store_id = ?, store_name = ?, slug = ?, whatsapp = ?, logo = ?, updated_at = ?
@@ -235,6 +240,13 @@ export async function updateStore(env: Env, storeId: string, userId: string, dat
     if (data.whatsapp !== undefined) {
       updates.push('whatsapp = ?');
       values.push(data.whatsapp);
+    }
+    if (data.description !== undefined) {
+      if (typeof data.description !== 'string' || data.description.trim().length > 300) {
+        return errorResponse('وصف المتجر طويل جداً (300 حرف كحد أقصى)', 400);
+      }
+      updates.push('description = ?');
+      values.push(data.description.trim() || null);
     }
     if (data.logo !== undefined) {
       updates.push('logo = ?');
@@ -403,6 +415,7 @@ function formatStore(store: DBStore): FormattedStore {
     id: store.id,
     slug: store.slug,
     name: store.name,
+    description: store.description ?? null,
     whatsapp: store.whatsapp,
     logo: store.logo,
     ownerId: store.owner_id,

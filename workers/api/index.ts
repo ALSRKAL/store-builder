@@ -39,6 +39,7 @@ interface DBStore {
   id: string;
   slug: string;
   name: string;
+  description: string | null;
   whatsapp: string | null;
   logo: string | null;
   owner_id: string;
@@ -335,6 +336,7 @@ async function getPublicStore(env: Env, slug: string): Promise<Response> {
           id: store.id,
           slug: store.slug,
           name: store.name,
+          description: store.description ?? null,
           whatsapp: store.whatsapp,
           logo: store.logo,
           ownerId: store.owner_id,

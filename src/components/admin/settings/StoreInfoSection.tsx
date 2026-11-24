@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Camera, Check, Loader2, Pencil, X } from 'lucide-react';
-import { Button, Input, Label, toast } from '../../ui';
+import { Button, Input, Label, Textarea, toast } from '../../ui';
 import { toEnglishNumbers } from '../../../utils/numberUtils';
 import SlugService from '../../../utils/slugService';
 
 export interface StoreInfoAdmin {
   storeName?: string;
+  description?: string;
   email?: string;
   whatsapp?: string;
   logo?: string;
@@ -15,7 +16,7 @@ export interface StoreInfoAdmin {
 
 interface StoreInfoSectionProps {
   adminData?: StoreInfoAdmin | null;
-  onUpdateStoreInfo: (data: { name?: string; email?: string; password?: string; whatsapp?: string; logoFile?: File }) => Promise<void>;
+  onUpdateStoreInfo: (data: { name?: string; description?: string; email?: string; password?: string; whatsapp?: string; logoFile?: File }) => Promise<void>;
 }
 
 /**
@@ -30,6 +31,9 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(adminData?.storeName ?? '');
   const [savingName, setSavingName] = useState(false);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [description, setDescription] = useState(adminData?.description ?? '');
+  const [savingDescription, setSavingDescription] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [email, setEmail] = useState(adminData?.email ?? '');
   const [password, setPassword] = useState('');
@@ -54,6 +58,23 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
       // الـContext يعرض Toast بالفعل.
     } finally {
       setSavingName(false);
+    }
+  };
+
+  const saveDescription = async (): Promise<void> => {
+    const trimmed = description.trim();
+    if (trimmed.length > 300) {
+      toast.warning('وصف المتجر طويل', 'استخدم 300 حرف كحد أقصى.');
+      return;
+    }
+    setSavingDescription(true);
+    try {
+      await onUpdateStoreInfo({ description: trimmed });
+      setEditingDescription(false);
+    } catch {
+      // الـContext يعرض Toast بالفعل.
+    } finally {
+      setSavingDescription(false);
     }
   };
 
@@ -188,6 +209,56 @@ export function StoreInfoSection({ adminData, onUpdateStoreInfo }: StoreInfoSect
             <dd className="m-0 flex items-center gap-1">
               <span className="truncate text-label font-medium text-foreground">{adminData?.storeName || '—'}</span>
               <Button type="button" size="iconSm" variant="ghost" aria-label="تعديل اسم المتجر" onClick={() => { setName(adminData?.storeName ?? ''); setEditingName(true); }}>
+                <Pencil className="size-4" strokeWidth={1.75} aria-hidden />
+              </Button>
+            </dd>
+          )}
+        </div>
+        <div className="grid gap-1 py-3 sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
+          <dt className="pt-2 text-label text-fg-muted">وصف المتجر</dt>
+          {editingDescription ? (
+            <dd className="m-0 flex flex-col gap-2">
+              <Label htmlFor="store-description" className="sr-only">وصف المتجر</Label>
+              <Textarea
+                id="store-description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                autoFocus
+                maxLength={300}
+                rows={3}
+                placeholder="وصف قصير يظهر في نتائج البحث ومعاينة الروابط على واتساب وتويتر."
+                className="min-h-24 flex-1"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setEditingDescription(false);
+                }}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] text-fg-muted" data-numeric>{description.length}/300</span>
+                <span className="flex items-center gap-1.5">
+                  <Button type="button" size="iconSm" aria-label="حفظ وصف المتجر" onClick={() => void saveDescription()} disabled={savingDescription}>
+                    {savingDescription ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" strokeWidth={1.75} aria-hidden />}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="iconSm"
+                    variant="outline"
+                    aria-label="إلغاء تعديل الوصف"
+                    onClick={() => { setDescription(adminData?.description ?? ''); setEditingDescription(false); }}
+                  >
+                    <X className="size-4" strokeWidth={1.75} aria-hidden />
+                  </Button>
+                </span>
+              </div>
+              <p className="text-[12px] leading-relaxed text-fg-muted">
+                يظهر هذا الوصف في محركات البحث ومعاينة الرابط عند مشاركته. اتركه فارغًا ليُولَّد تلقائيًا.
+              </p>
+            </dd>
+          ) : (
+            <dd className="m-0 flex items-start gap-1">
+              <span className="min-w-0 flex-1 whitespace-pre-wrap text-label font-medium leading-relaxed text-foreground">
+                {adminData?.description || '—'}
+              </span>
+              <Button type="button" size="iconSm" variant="ghost" aria-label="تعديل وصف المتجر" onClick={() => { setDescription(adminData?.description ?? ''); setEditingDescription(true); }}>
                 <Pencil className="size-4" strokeWidth={1.75} aria-hidden />
               </Button>
             </dd>

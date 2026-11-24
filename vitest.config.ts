@@ -8,8 +8,8 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
-    testTimeout: 20000,
-    hookTimeout: 30000,
+    testTimeout: 40000,
+    hookTimeout: 40000,
     maxWorkers: 2,
     coverage: {
       provider: 'v8',

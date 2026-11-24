@@ -45,7 +45,6 @@ const DEFAULT_DESCRIPTION =
   'StoreBuilder - أنشئ متجرك الإلكتروني في دقائق بدون برمجة. منصة عربية احترافية لإنشاء المتاجر الإلكترونية.';
 const DEFAULT_OG_DESCRIPTION =
   'منصة StoreBuilder لإنشاء المتاجر الإلكترونية في دقائق. بدون برمجة، بدون تعقيد.';
-const DEFAULT_OG_IMAGE = 'https://store-build.pages.dev/og-image.png';
 
 function StoreSkeleton(): React.JSX.Element {
   return (
@@ -247,13 +246,18 @@ function Store(): React.JSX.Element {
   useEffect(() => {
     if (!extendedStore) return;
     const storeName = extendedStore.name ?? 'المتجر';
-    const storeLogo = extendedStore.logo ?? '/og-image.jpg';
-    const currentUrl = window.location.href;
+    const absoluteAsset = (value: string): string => {
+      try { return new URL(value, window.location.origin).href; } catch { return value; }
+    };
+    const storeLogo = absoluteAsset(extendedStore.logo ?? '/og-image.png');
+    const currentUrl = `${window.location.origin}/store/${extendedStore.slug}`;
     const productNames = products.slice(0, 3).map((product) => product.name);
-    const description =
+    const merchantDescription = extendedStore.description?.trim();
+    const description = merchantDescription || (
       products.length === 0
         ? `${storeName} - متجر إلكتروني للتسوق أونلاين`
-        : `${storeName} - تسوق ${productNames.join('، ')}${products.length > 3 ? ' والمزيد' : ''} | ${products.length} منتج`;
+        : `${storeName} - تسوق ${productNames.join('، ')}${products.length > 3 ? ' والمزيد' : ''} | ${products.length} منتج`
+    );
     const title = `${storeName} | تسوق أونلاين`;
 
     document.title = title;
@@ -271,7 +275,7 @@ function Store(): React.JSX.Element {
       }
       tag.setAttribute('content', content);
     };
-    const shareImage = storeLogo || products[0]?.images?.[0] || '/og-image.jpg';
+    const shareImage = absoluteAsset(products[0]?.images?.[0] ?? storeLogo);
     setMeta('og:title', title);
     setMeta('og:description', description);
     setMeta('og:image', shareImage);
@@ -285,18 +289,19 @@ function Store(): React.JSX.Element {
     setMeta('twitter:image', shareImage, false);
 
     return () => {
+      const defaultImage = `${window.location.origin}/og-image.png`;
       document.title = DEFAULT_TITLE;
       document.querySelector('meta[name="description"]')?.setAttribute('content', DEFAULT_DESCRIPTION);
       setMeta('og:title', DEFAULT_TITLE);
       setMeta('og:description', DEFAULT_OG_DESCRIPTION);
-      setMeta('og:image', DEFAULT_OG_IMAGE);
-      setMeta('og:url', 'https://store-build.pages.dev');
+      setMeta('og:image', defaultImage);
+      setMeta('og:url', window.location.origin);
       setMeta('og:site_name', 'StoreBuilder');
       setMeta('og:locale', 'ar_SA');
       setMeta('twitter:card', 'summary_large_image', false);
       setMeta('twitter:title', DEFAULT_TITLE, false);
       setMeta('twitter:description', 'منصة StoreBuilder لإنشاء المتاجر الإلكترونية في دقائق.', false);
-      setMeta('twitter:image', DEFAULT_OG_IMAGE, false);
+      setMeta('twitter:image', defaultImage, false);
       const icon = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
       if (icon) icon.href = '/favicon.svg';
     };

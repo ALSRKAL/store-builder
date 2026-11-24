@@ -10,6 +10,7 @@ export const adminProfileSchema = z.object({
   id: z.string(),
   email: z.string(),
   storeName: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
   storeId: z.string().optional().nullable(),
   slug: z.string().optional().nullable(),
   whatsapp: z.string().optional().nullable(),
@@ -39,6 +40,7 @@ export const adminProfileSchema = z.object({
 // Admin creation schema
 export const createAdminSchema = z.object({
   storeName: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
   storeId: z.string().optional().nullable(),
   slug: z.string().optional().nullable(),
   whatsapp: z.string().optional().nullable(),
@@ -87,6 +89,7 @@ export const subscriberSchema = z.object({
   id: z.string(),
   email: z.string(),
   storeName: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
   storeId: z.string().optional().nullable(),
   slug: z.string().optional().nullable(),
   subscriptionEnd: z.string().optional().nullable(),

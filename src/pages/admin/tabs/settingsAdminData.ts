@@ -4,6 +4,7 @@ import type { AdminProfile } from '../../../schemas';
 export interface SettingsAdminData {
   uid: string;
   storeName: string;
+  description?: string;
   email?: string;
   whatsapp?: string;
   logo?: string;
@@ -20,6 +21,7 @@ export function buildSettingsAdminData(profile: AdminProfile, uid: string): Sett
   return {
     uid,
     storeName: profile.storeName ?? '',
+    ...(profile.description ? { description: profile.description } : {}),
     ...(profile.email ? { email: profile.email } : {}),
     ...(profile.whatsapp ? { whatsapp: profile.whatsapp } : {}),
     ...(profile.logo ?? profile.storeLogo

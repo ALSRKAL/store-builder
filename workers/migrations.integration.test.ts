@@ -44,9 +44,9 @@ afterAll(async () => {
 describe('managed D1 migration release safety (real Miniflare SQLite)', () => {
   it('installs the complete baseline on a fresh database and repeats without changes', async () => {
     const db = await database();
-    expect(await applyLocal(db)).toMatchObject({ safeToApply: true, applied: ['0001', '0002', '0003'] });
+    expect(await applyLocal(db)).toMatchObject({ safeToApply: true, applied: ['0001', '0002', '0003', '0004'] });
     const before = await inspectDatabase(db);
-    expect(before.history.map(row => row.id)).toEqual(['0001', '0002', '0003']);
+    expect(before.history.map(row => row.id)).toEqual(['0001', '0002', '0003', '0004']);
     expect(before.schema.filter(s => s.type === 'table').map(s => s.name)).toEqual(expect.arrayContaining([
       'admins', 'stores', 'products', 'categories', 'subscription_codes', 'usage',
       'store_payment_methods', 'payment_receipts', 'orders', 'fcm_tokens', 'push_subscriptions',
@@ -71,7 +71,7 @@ describe('managed D1 migration release safety (real Miniflare SQLite)', () => {
     expect(statements("CREATE TRIGGER sample AFTER INSERT ON admins BEGIN SELECT CASE WHEN NEW.id='a;b' THEN 1 ELSE 0 END; SELECT 2; END; CREATE TABLE second(id TEXT);")).toHaveLength(2);
     const result = cli('check', '--base', 'ae83fe7d2168391a1024b60ef4dffe2c55ce1747');
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).migrations).toHaveLength(3);
+    expect(JSON.parse(result.stdout).migrations).toHaveLength(4);
   });
 
   it('rejects arbitrary and quoted trigger writes unless the exact source bytes were reviewed', async () => {
@@ -95,10 +95,10 @@ describe('managed D1 migration release safety (real Miniflare SQLite)', () => {
     // Updating a manifest checksum cannot grant approval to an otherwise unsafe trigger.
     const copy = resolve(temporary, 'trigger-policy-copy');
     await cp(DIRECTORY, copy, { recursive: true });
-    const file = '0004_unreviewed_trigger.sql';
+    const file = '0005_unreviewed_trigger.sql';
     await writeFile(resolve(copy, file), arbitrary);
     const manifest = JSON.parse(await readFile(resolve(copy, 'manifest.json'), 'utf8'));
-    manifest.migrations.push({ id: '0004', file, sha256: sha256(arbitrary) });
+    manifest.migrations.push({ id: '0005', file, sha256: sha256(arbitrary) });
     await writeFile(resolve(copy, 'manifest.json'), JSON.stringify(manifest));
     await expect(loadManifest({ directory: copy })).rejects.toThrow('SQL risk policy');
   });
@@ -153,7 +153,7 @@ describe('managed D1 migration release safety (real Miniflare SQLite)', () => {
     const plan = await planMigrations(inventory, proof);
     expect(plan).toMatchObject({ safeToApply: true, mode: 'adoption' });
     const result = await applyLocal(db, { target: inventory.target, proof, plan });
-    expect(result.applied).toEqual(['adoption', '0002', '0003']);
+    expect(result.applied).toEqual(['adoption', '0002', '0003', '0004']);
     expect((await db.prepare('SELECT id,trial_used FROM admins ORDER BY id').all()).results).toEqual(before.results);
     expect(await db.prepare('SELECT total FROM orders').first()).toEqual({ total: 120 });
     expect(await db.prepare('SELECT config_details FROM store_payment_methods').first()).toEqual({ config_details: '{}' });
@@ -168,7 +168,7 @@ describe('managed D1 migration release safety (real Miniflare SQLite)', () => {
 
   it('proof-adopts a complete current schema without reapplying SQL or changing populated data', async () => {
     const db = await database();
-    await migratePrefix(db, 3);
+    await migratePrefix(db, 4);
     await db.prepare("INSERT INTO admins(id,email,plan_id,is_trial) VALUES('owner','owner@example.test','annual',0)").run();
     await db.prepare("INSERT INTO stores(id,slug,name,owner_id) VALUES('full','full','Kept','owner')").run();
     const inventory = await inspectDatabase(db, 'complete-current-id');
@@ -260,7 +260,7 @@ describe('managed D1 migration release safety (real Miniflare SQLite)', () => {
     expect(result.status, result.stderr).toBe(0);
     const artifact = JSON.parse(result.stdout);
     expect(artifact).toMatchObject({ safeToApply: true, target: 'cli-target' });
-    expect(artifact.batches.map(b => b.id)).toEqual(['0001', '0002', '0003']);
+    expect(artifact.batches.map(b => b.id)).toEqual(['0001', '0002', '0003', '0004']);
     for (const batch of artifact.batches) {
       const sql = await readFile(batch.file, 'utf8');
       expect(sha256(sql)).toBe(batch.sha256);

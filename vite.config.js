@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { build as esbuild } from 'esbuild';
 import { resolve } from 'path';
 
 /**
@@ -35,6 +36,60 @@ function firebaseSwConfigPlugin(env) {
   };
 }
 
+
+/**
+ * Emits the Pages advanced-mode worker next to index.html. The worker supplies
+ * per-store OG/Twitter metadata and same-origin robots/sitemap; the API URL is
+ * injected at build time so staging never points at production.
+ */
+function pagesWorkerPlugin(env) {
+  const apiUrl = env.VITE_API_URL ?? '';
+  const siteUrl = env.VITE_SITE_URL ?? 'http://localhost:5173';
+  const robots = `# StoreBuilder
+User-agent: *
+Allow: /
+Allow: /store/
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: ${siteUrl}/sitemap.xml
+`;
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${siteUrl}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+</urlset>`;
+  const devRoutes = server => {
+    server.middlewares.use('/robots.txt', (_request, response) => {
+      response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      response.end(robots);
+    });
+    server.middlewares.use('/sitemap.xml', (_request, response) => {
+      response.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      response.end(sitemap);
+    });
+  };
+  return {
+    name: 'pages-og-worker',
+    async generateBundle() {
+      const result = await esbuild({
+        entryPoints: [resolve(__dirname, 'src/pages/og-worker.ts')],
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'neutral',
+        target: 'es2022',
+        minify: true,
+        define: { __STORE_API_URL__: JSON.stringify(apiUrl) },
+      });
+      const source = result.outputFiles?.[0]?.text;
+      if (!source) this.error('Pages worker build produced no output');
+      this.emitFile({ type: 'asset', fileName: '_worker.js', source });
+    },
+    configureServer: devRoutes,
+    configurePreviewServer: devRoutes,
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const isolatedBuild = process.env.STORE_ISOLATED_BUILD === 'true';
   const env = isolatedBuild
@@ -44,7 +99,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: __dirname,
     ...(isolatedBuild ? { envDir: false } : {}),
-    plugins: [react(), firebaseSwConfigPlugin(env)],
+    plugins: [react(), firebaseSwConfigPlugin(env), pagesWorkerPlugin(env)],
     resolve: {
     alias: {
       '@': resolve(__dirname, './src'),

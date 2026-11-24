@@ -11,6 +11,8 @@ interface Env {
     DB: D1Database;
     R2_BUCKET?: R2Bucket;
     FIREBASE_PROJECT_ID?: string;
+    SITE_URL?: string;
+    API_URL?: string;
 }
 
 interface StoreForSitemap {
@@ -29,7 +31,15 @@ interface ProductForSitemap {
 
 // ===== Constants =====
 
-const BASE_URL = 'https://store-build.pages.dev';
+const DEFAULT_BASE_URL = 'https://store-build.pages.dev';
+
+function siteBase(env: Env): string {
+    return (env.SITE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+}
+
+function apiBase(env: Env): string {
+    return (env.API_URL ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+}
 
 // ===== Helper Functions =====
 
@@ -63,7 +73,7 @@ export async function generateSitemap(env: Env): Promise<Response> {
       WHERE s.is_active = 1 
         AND a.dashboard_is_active = 1 
         AND a.store_is_active = 1
-        AND a.subscription_end > datetime('now')
+        AND datetime(a.subscription_end) > datetime('now')
       ORDER BY s.updated_at DESC
     `).all<StoreForSitemap>();
 
@@ -76,7 +86,7 @@ export async function generateSitemap(env: Env): Promise<Response> {
   
   <!-- الصفحة الرئيسية -->
   <url>
-    <loc>${BASE_URL}/</loc>
+    <loc>${siteBase(env)}/</loc>
     <lastmod>${today}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
@@ -84,7 +94,7 @@ export async function generateSitemap(env: Env): Promise<Response> {
   
   <!-- صفحة الشروط والأحكام -->
   <url>
-    <loc>${BASE_URL}/terms</loc>
+    <loc>${siteBase(env)}/terms</loc>
     <lastmod>${today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
@@ -92,7 +102,7 @@ export async function generateSitemap(env: Env): Promise<Response> {
   
   <!-- صفحة تسجيل الدخول للتجار -->
   <url>
-    <loc>${BASE_URL}/admin</loc>
+    <loc>${siteBase(env)}/admin</loc>
     <lastmod>${today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -105,7 +115,7 @@ export async function generateSitemap(env: Env): Promise<Response> {
             sitemap += `
   <!-- متجر: ${escapeXml(store.name)} -->
   <url>
-    <loc>${BASE_URL}/store/${escapeXml(store.slug)}</loc>
+    <loc>${siteBase(env)}/store/${escapeXml(store.slug)}</loc>
     <lastmod>${lastMod}</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
@@ -130,7 +140,7 @@ export async function generateSitemap(env: Env): Promise<Response> {
         const fallbackSitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>${BASE_URL}/</loc>
+    <loc>${siteBase(env)}/</loc>
     <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
@@ -146,7 +156,7 @@ export async function generateSitemap(env: Env): Promise<Response> {
 
 // ===== Robots.txt Generator =====
 
-export function generateRobotsTxt(): Response {
+export function generateRobotsTxt(env: Env): Response {
     const robotsTxt = `# =============================================
 # robots.txt for StoreBuilder
 # https://store-build.pages.dev
@@ -232,13 +242,12 @@ Disallow: /
 # =============================================
 # Sitemap Location
 # =============================================
-Sitemap: ${BASE_URL}/sitemap.xml
-Sitemap: ${BASE_URL}/api/seo/sitemap.xml
+Sitemap: ${siteBase(env)}/sitemap.xml
 
 # =============================================
 # Host
 # =============================================
-Host: ${BASE_URL}
+Host: ${siteBase(env)}
 `;
 
     return new Response(robotsTxt, {
@@ -285,7 +294,7 @@ export async function generateStoreSitemap(env: Env, slug: string): Promise<Resp
   
   <!-- صفحة المتجر الرئيسية -->
   <url>
-    <loc>${BASE_URL}/store/${escapeXml(canonicalSlug)}</loc>
+    <loc>${siteBase(env)}/store/${escapeXml(canonicalSlug)}</loc>
     <lastmod>${formatDate(store.updated_at)}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
@@ -297,7 +306,7 @@ export async function generateStoreSitemap(env: Env, slug: string): Promise<Resp
             const lastMod = formatDate(product.updated_at);
             sitemap += `
   <url>
-    <loc>${BASE_URL}/store/${escapeXml(canonicalSlug)}?product=${product.id}</loc>
+    <loc>${siteBase(env)}/store/${escapeXml(canonicalSlug)}?product=${product.id}</loc>
     <lastmod>${lastMod}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -335,8 +344,8 @@ export async function getSeoStats(env: Env): Promise<Response> {
             activeStores: stats?.active_stores ?? 0,
             totalProducts: stats?.total_products ?? 0,
             totalCategories: stats?.total_categories ?? 0,
-            sitemapUrl: `${BASE_URL}/api/seo/sitemap.xml`,
-            robotsUrl: `${BASE_URL}/api/seo/robots.txt`,
+            sitemapUrl: `${siteBase(env)}/sitemap.xml`,
+            robotsUrl: `${apiBase(env)}/api/seo/robots.txt`,
             lastUpdated: new Date().toISOString(),
         }), {
             status: 200,
@@ -366,7 +375,7 @@ export async function handleSeo(request: Request, env: Env, path: string): Promi
 
         // Robots.txt
         if (subPath === '/robots.txt' || subPath === '/robots') {
-            return generateRobotsTxt();
+            return generateRobotsTxt(env);
         }
 
         // Store-specific sitemap

@@ -126,6 +126,7 @@ export const storeSchema = z.object({
 export const createStoreSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
+  description: z.string().max(300).optional(),
   whatsapp: z.string().optional(),
   logo: z.string().optional(),
 });
@@ -134,6 +135,7 @@ export const createStoreSchema = z.object({
 export const updateStoreSchema = z.object({
   name: z.string().optional(),
   slug: z.string().optional(),
+  description: z.string().max(300).optional(),
   whatsapp: z.string().optional(),
   logo: z.string().optional(),
   currency: z.string().optional(),

@@ -98,7 +98,7 @@ export const uploadImage = async (
       maxHeight: options.maxHeight ?? 1200,
       quality: options.quality ?? 0.85,
       maxSizeMB: options.maxSizeMB ?? 1,
-      outputFormat: 'webp',
+      outputFormat: options.outputFormat ?? 'webp',
       preserveTransparency: true,
     });
 

@@ -67,6 +67,7 @@ interface OrderInput {
 
 interface StoreInput {
   name?: string;
+  description?: string;
   slug?: string;
   whatsapp?: string;
   logo?: string;
@@ -97,6 +98,7 @@ interface SanitizedOrder {
 
 interface SanitizedStore {
   name?: string;
+  description?: string | null;
   slug?: string;
   whatsapp?: string | null;
   logo?: string | null;
@@ -556,6 +558,12 @@ export function validateStoreInput(
     else sanitized.slug = slugResult.value;
   }
   
+  if (data.description !== undefined) {
+    const rawDescription = typeof data.description === 'string' ? data.description.trim() : '';
+    if (rawDescription.length > 300) errors.push('وصف المتجر طويل جداً (300 حرف كحد أقصى)');
+    else sanitized.description = sanitizeString(rawDescription, 300);
+  }
+
   if (data.whatsapp !== undefined) {
     const phoneResult = validatePhone(data.whatsapp, 'رقم الواتساب', false);
     if (!phoneResult.valid) errors.push(phoneResult.error!);

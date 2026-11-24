@@ -8,7 +8,7 @@ import { updateStore } from './stores';
 import { resolveStoreIdentity } from '../utils/storeLookup';
 
 const root = resolve(import.meta.dirname, '../../..');
-const files = ['workers/migrations-managed/0001_baseline.sql', 'workers/migrations-managed/0002_store_revisions.sql', 'workers/migrations-managed/0003_trial_ledger.sql'];
+const files = ['workers/migrations-managed/0001_baseline.sql', 'workers/migrations-managed/0002_store_revisions.sql', 'workers/migrations-managed/0003_trial_ledger.sql', 'workers/migrations-managed/0004_store_description.sql'];
 
 function statements(sql: string): string[] {
   return sql.replace(/--[^\n]*/g, '').match(/\s*CREATE\s+TRIGGER[\s\S]*?END\s*;|[^;]+;/gi)?.map(value => value.trim()).filter(Boolean) ?? [];
@@ -50,6 +50,14 @@ describe('store rename and slug safety', () => {
     expect(admin).toEqual({ store_name: 'متجر الأزياء', slug: 'mtjr-alazya' });
     expect((await resolveStoreIdentity(db, 'shop-one'))?.id).toBe('shop-one');
     expect((await resolveStoreIdentity(db, 'mtjr-alazya'))?.slug).toBe('mtjr-alazya');
+  });
+
+  it('stores a bounded merchant description for social metadata', async () => {
+    await seedStore('desc-owner', 'desc-store', 'desc-store');
+    const saved = await updateStore(env, 'desc-store', 'desc-owner', { description: 'أفضل متجر للملابس في صنعاء' });
+    expect(saved.status).toBe(200);
+    expect(await db.prepare(`SELECT description FROM stores WHERE id = ?`).bind('desc-store').first<{ description: string }>()).toEqual({ description: 'أفضل متجر للملابس في صنعاء' });
+    expect((await updateStore(env, 'desc-store', 'desc-owner', { description: 'x'.repeat(301) })).status).toBe(400);
   });
 
   it('rejects a slug owned by another store or reserved', async () => {

@@ -10,6 +10,8 @@ export interface Env {
   R2_BUCKET: R2Bucket;
   STORE_IMAGES?: R2Bucket;
   R2_PUBLIC_URL?: string;
+  SITE_URL?: string;
+  API_URL?: string;
   RELEASE_ID?: string;
   FIREBASE_PROJECT_ID?: string;
   FCM_PROJECT_ID?: string;
@@ -45,6 +47,7 @@ export interface DBStore {
   id: string;
   slug: string;
   name: string;
+  description: string | null;
   whatsapp: string | null;
   logo: string | null;
   owner_id: string;

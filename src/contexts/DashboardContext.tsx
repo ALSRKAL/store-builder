@@ -92,6 +92,7 @@ export interface CategoryFormData {
 
 export interface StoreInfoUpdate {
   name?: string;
+  description?: string;
   email?: string;
   password?: string;
   whatsapp?: string;
@@ -483,6 +484,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
 
   const handleUpdateStoreInfo = async ({
     name,
+    description,
     email,
     password,
     whatsapp,
@@ -490,7 +492,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
   }: StoreInfoUpdate): Promise<void> => {
     if (!adminData?.storeId) return;
     try {
-      const storeUpdates: { name?: string; slug?: string; whatsapp?: string; logo?: string } = {};
+      const storeUpdates: { name?: string; description?: string; slug?: string; whatsapp?: string; logo?: string } = {};
       const oldLogo = adminData.logo ?? adminData.storeLogo;
       if (name !== undefined && name.trim() !== (adminData.storeName ?? '')) {
         const trimmed = name.trim();
@@ -499,13 +501,19 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
         storeUpdates.name = trimmed;
         if (slug !== (adminData.slug ?? adminData.storeSlug)) storeUpdates.slug = slug;
       }
+      if (description !== undefined) {
+        const trimmed = description.trim();
+        if (trimmed.length > 300) throw new Error('DESCRIPTION_TOO_LONG');
+        if (trimmed !== (adminData.description ?? '')) storeUpdates.description = trimmed;
+      }
       if (whatsapp) storeUpdates.whatsapp = whatsapp;
       if (logoFile && user) {
         const result = await uploadImage(logoFile, {
           folder: `stores/${user.uid}/logo`,
           maxWidth: 500,
           maxHeight: 500,
-          quality: 0.9,
+          quality: 0.95,
+          outputFormat: 'png',
         });
         if (result?.url) {
           storeUpdates.logo = result.url;
@@ -535,6 +543,7 @@ export function DashboardProvider({ children }: { children: ReactNode }): React.
       const code = error instanceof Error ? error.message : '';
       const known: Record<string, [string, string]> = {
         INVALID_STORE_NAME: ['اسم المتجر قصير', 'استخدم حرفين على الأقل.'],
+        DESCRIPTION_TOO_LONG: ['وصف المتجر طويل', 'استخدم 300 حرف كحد أقصى.'],
         SLUG_UNAVAILABLE: ['تعذّر توليد رابط للمتجر', 'جرّب اسماً مختلفاً.'],
         PASSWORD_REQUIRED: ['كلمة المرور مطلوبة', 'أدخل كلمة المرور الحالية لتغيير البريد.'],
         WRONG_PASSWORD: ['كلمة المرور غير صحيحة', 'أعد المحاولة.'],
