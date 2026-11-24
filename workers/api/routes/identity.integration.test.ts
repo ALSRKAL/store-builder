@@ -58,6 +58,8 @@ describe('store rename and slug safety', () => {
     expect(saved.status).toBe(200);
     expect(await db.prepare(`SELECT description FROM stores WHERE id = ?`).bind('desc-store').first<{ description: string }>()).toEqual({ description: 'أفضل متجر للملابس في صنعاء' });
     expect((await updateStore(env, 'desc-store', 'desc-owner', { description: 'x'.repeat(301) })).status).toBe(400);
+    expect((await updateStore(env, 'desc-store', 'desc-owner', { logo: 'https://cdn.example.test/logo.png' })).status).toBe(200);
+    expect(await db.prepare(`SELECT logo FROM admins WHERE id = ?`).bind('desc-owner').first<{ logo: string }>()).toEqual({ logo: 'https://cdn.example.test/logo.png' });
   });
 
   it('rejects a slug owned by another store or reserved', async () => {

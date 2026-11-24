@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS stores (
   id TEXT PRIMARY KEY,                    -- slug (unique identifier)
   slug TEXT UNIQUE NOT NULL,              -- URL slug
   name TEXT NOT NULL,                     -- اسم المتجر
+  description TEXT,                       -- وصف المتجر (ميتا/مشاركة)
   whatsapp TEXT,                          -- رقم الواتساب
   logo TEXT,                              -- رابط الشعار
   owner_id TEXT NOT NULL,                 -- Firebase UID

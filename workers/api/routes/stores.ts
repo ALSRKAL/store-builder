@@ -279,6 +279,10 @@ export async function updateStore(env: Env, storeId: string, userId: string, dat
         UPDATE admins SET store_name = ?, slug = ?, updated_at = ? WHERE id = ?
       `).bind(nextName, nextSlug, timestamp, userId));
     }
+    // Dashboard/profile logo is read from admins; keep it in sync with the store.
+    if (data.logo !== undefined) {
+      statements.push(env.DB.prepare(`UPDATE admins SET logo = ?, updated_at = ? WHERE id = ?`).bind(data.logo || null, timestamp, userId));
+    }
     await env.DB.batch(statements);
 
     const updated = await env.DB.prepare(`

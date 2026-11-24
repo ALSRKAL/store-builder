@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 const appPort = process.env.LOCAL_GUI_APP_PORT || '5191';
 const apiPort = process.env.LOCAL_GUI_API_PORT || '8791';
+// GitHub-hosted runners ship Google Chrome; using it avoids a fragile browser download.
+const browserChannel = process.env.CI ? 'chrome' : undefined;
 export default defineConfig({
   testDir: './e2e', testIgnore: '**/*.production.spec.ts',
   fullyParallel: false, workers: 1, retries: 0, forbidOnly: Boolean(process.env.CI),
@@ -8,6 +10,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results/browser',
   use: { baseURL: `http://127.0.0.1:${appPort}`, serviceWorkers: 'block',
+    ...(browserChannel ? { channel: browserChannel } : {}),
     trace: 'retain-on-failure', screenshot: 'only-on-failure', video: 'off' },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },

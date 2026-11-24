@@ -73,8 +73,6 @@ jobs:
         run: npm run check:css -- dist-ci
       - name: Bundle Worker without cloud publishing
         run: npm run build:worker
-      - name: Install browser for local-only end-to-end tests
-        run: npm exec --no -- playwright install --with-deps chromium
       - name: Local-only end-to-end tests
         run: npm run test:e2e
       - name: Production-build end-to-end tests (local only)
