@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Default branch and approval gate must be configured before protected job starts
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           TARGET: ${{ inputs.environment }}
           CONFIRMATION: ${{ inputs.confirmation }}
