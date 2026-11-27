@@ -58,7 +58,7 @@
   white-space: nowrap;
   line-height: 20px;
   visibility: hidden;
-  transform: translateX(var(--announcement-start, 100vw));
+  transform: translateX(var(--announcement-start, -100vw));
 }
 
 .announcement-track[data-ready="true"] {

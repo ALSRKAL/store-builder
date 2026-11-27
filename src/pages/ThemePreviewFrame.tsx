@@ -154,6 +154,13 @@ export default function ThemePreviewFrame(): React.JSX.Element {
   );
 
   const showSlider = displayMode !== 'story' && !search && !category && featuredProducts.length > 0;
+  const isFilteredView = Boolean(search || category);
+  const categorySections = useMemo(
+    () => demoCategories
+      .map((item) => ({ category: item, items: demoProducts.filter((product) => product.categoryId === item.id) }))
+      .filter((section) => section.items.length > 0),
+    [],
+  );
 
   return (
     <StoreContext.Provider value={storeValue}>
@@ -175,7 +182,7 @@ export default function ThemePreviewFrame(): React.JSX.Element {
               <ProductSlider products={featuredProducts} onProductClick={noop} title="أحدث المنتجات" />
             ) : null}
 
-            {filteredProducts.length > 0 ? (
+            {filteredProducts.length > 0 && isFilteredView ? (
               <div className="mb-4 flex items-end justify-between gap-3">
                 <h2 className="flex items-center gap-2 text-h3 font-semibold text-[var(--store-body-text)]">
                   {category ? 'منتجات التصنيف' : 'جميع المنتجات'}
@@ -218,12 +225,30 @@ export default function ThemePreviewFrame(): React.JSX.Element {
                   جرّب كلمة أخرى أو تصفح جميع المنتجات.
                 </p>
               </div>
-            ) : (
+            ) : displayMode === 'story' || isFilteredView || categorySections.length === 0 ? (
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:gap-5">
                 {filteredProducts.map((product) => (
                   <ProductCard key={product.id} product={product} onClick={noop} />
                 ))}
               </div>
+            ) : (
+              <>
+                {categorySections.map(({ category: section, items }) => (
+                  <section key={section.id} className="mb-8">
+                    <div className="mb-3 flex items-end justify-between gap-3 border-b border-[var(--store-border)] pb-2.5">
+                      <h2 className="flex items-center gap-2 text-h3 font-semibold text-[var(--store-body-text)]">
+                        {section.name}
+                        <span className="text-[13px] font-normal tabular-nums text-[var(--store-body-text)]/60" data-numeric>{items.length}</span>
+                      </h2>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:gap-5">
+                      {items.slice(0, 6).map((product) => (
+                        <ProductCard key={product.id} product={product} onClick={noop} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </>
             )}
           </main>
 

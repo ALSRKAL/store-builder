@@ -36,9 +36,21 @@ interface ThemeSettingsProps {
   storeCurrency?: string;
 }
 
+/** Old/partial theme JSON must not render black color inputs. */
+function normalizeTheme(theme: ThemeWithDisplayMode | null | undefined): ThemeConfig {
+  const normalized: ThemeConfig = { ...defaultTheme };
+  if (!theme) return normalized;
+  const colorAndShapeKeys = ['primary', 'secondary', 'accent', 'headerBg', 'headerText', 'bodyBg', 'cardBg', 'footerBg', 'footerText', 'buttonRadius', 'cardRadius'] as const;
+  for (const key of colorAndShapeKeys) {
+    const value = theme[key];
+    if (typeof value === 'string' && value.trim()) normalized[key] = value;
+  }
+  return normalized;
+}
+
 function ThemeSettings({ currentTheme, onSave, loading, storeCurrency = 'SAR' }: ThemeSettingsProps): React.JSX.Element {
   const { currentPlan, adminData } = useAuth();
-  const [theme, setTheme] = useState<ThemeConfig>(currentTheme ?? defaultTheme);
+  const [theme, setTheme] = useState<ThemeConfig>(() => normalizeTheme(currentTheme));
   const [activePreset, setActivePreset] = useState<PresetThemeKey | null>(currentTheme ? null : 'default');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>(() =>
     typeof window !== 'undefined' && window.matchMedia('(max-width: 1279px)').matches ? 'mobile' : 'desktop',
@@ -55,7 +67,7 @@ function ThemeSettings({ currentTheme, onSave, loading, storeCurrency = 'SAR' }:
       setActivePreset('default');
       return;
     }
-    setTheme(currentTheme);
+    setTheme(normalizeTheme(currentTheme));
     setDisplayMode(currentTheme.displayMode ?? 'grid');
     const preset = (Object.entries(presetThemes) as [PresetThemeKey, ThemeConfig][]).find(
       ([, candidate]) =>
@@ -110,7 +122,7 @@ function ThemeSettings({ currentTheme, onSave, loading, storeCurrency = 'SAR' }:
 
       <div className="border border-border bg-card p-5">
         <div className="mb-5 border-b border-border pb-4">
-          <h2 className="font-display text-h3 font-semibold text-foreground">تخصيص المظهر</h2>
+          <h2 className="font-display text-h3 font-semibold text-foreground">خيارات المظهر</h2>
           <p className="mt-1 text-label text-fg-muted">اختر ثيماً جاهزاً أو خصّص الألوان، ثم احفظ لتظهر في متجرك.</p>
         </div>
 

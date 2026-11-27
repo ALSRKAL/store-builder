@@ -39,11 +39,12 @@ test('responsive real App utility CSS and desktop/mobile navigation geometry', a
     const mobileAdd = page.getByRole('button', { name: 'أضف منتج تجريبي أول إلى السلة', exact: true }).filter({ visible: true }).first();
     await expect(mobileAdd).toBeVisible();
     expect((await mobileAdd.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    for (const name of [/فتح البحث/, /فتح التصنيفات/, /السلة،/]) {
+    for (const name of [/فتح البحث/, /^الكل/, /السلة،/]) {
       const control = page.getByRole('button', { name }).filter({ visible: true }).first();
       await expect(control).toBeVisible();
       expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
+    await expect(page.getByRole('heading', { name: /منتجات تجريبية/ })).toBeVisible();
     await page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }).first().click();
     for (const name of ['أضف للسلة', 'اطلب الآن']) {
       const control = page.getByRole('button', { name, exact: true }).filter({ visible: true }).first();
@@ -109,9 +110,9 @@ test('announcement max length, real edge-to-edge motion, dismissal/new identity 
       duration: parseFloat(style.animationDuration), viewport: viewport.clientWidth, text: el.scrollWidth,
       frames: animation ? (animation.effect as KeyframeEffect).getKeyframes().map(frame => frame.transform) : [] };
   });
-  expect(geometry.start).toBeCloseTo(geometry.viewport + 2, 0);
-  expect(geometry.end).toBeCloseTo(-geometry.text - 2, 0);
-  expect(geometry.duration).toBeCloseTo((geometry.start - geometry.end) / 55, 1);
+  expect(geometry.start).toBeCloseTo(-geometry.text - 2, 0);
+  expect(geometry.end).toBeCloseTo(geometry.viewport + 2, 0);
+  expect(geometry.duration).toBeCloseTo((geometry.end - geometry.start) / 55, 1);
   expect(geometry.frames).toHaveLength(2);
   expect(geometry.frames[0]).toContain(String(geometry.start));
   expect(geometry.frames[1]).toContain(String(geometry.end));

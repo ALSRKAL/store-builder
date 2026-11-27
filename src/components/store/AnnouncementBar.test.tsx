@@ -25,9 +25,9 @@ describe('AnnouncementBar', () => {
     'enters and exits fully outside viewport %s with text width %s at constant speed',
     (viewport, text) => {
       const { start, end, duration } = tickerMotion(viewport, text);
-      expect(start).toBeGreaterThan(viewport);
-      expect(end + text).toBeLessThan(0);
-      expect((start - end) / duration).toBeCloseTo(55, 8);
+      expect(start + text).toBeLessThan(0);
+      expect(end).toBeGreaterThan(viewport);
+      expect((end - start) / duration).toBeCloseTo(55, 8);
     },
   );
 

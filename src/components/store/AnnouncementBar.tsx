@@ -48,9 +48,11 @@ function announcementLink(link: string): string | null {
 }
 
 export function tickerMotion(viewportWidth: number, textWidth: number): { start: number; end: number; duration: number } {
-  const start = viewportWidth + 2;
-  const end = -textWidth - 2;
-  return { start, end, duration: (start - end) / 55 };
+  // Arabic reads right-to-left: the sentence enters from the left edge and
+  // travels right, so the beginning of the line is the part revealed first.
+  const start = -textWidth - 2;
+  const end = viewportWidth + 2;
+  return { start, end, duration: (end - start) / 55 };
 }
 
 function AnnouncementTicker({ children }: { children: ReactNode }): React.JSX.Element {

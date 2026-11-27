@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Menu, Search, ShoppingBag, X } from 'lucide-react';
+import { Search, ShoppingBag, X } from 'lucide-react';
 import { useStore } from '../../contexts/StoreContext';
 import { useCart } from '../../contexts/CartContext';
 import { isLightColor } from '../../utils/themeUtils';
@@ -22,7 +22,6 @@ interface HeaderProps {
 export default function Header({ onSearch, selectedCategory, onCategoryChange, onCartOpen, searchValue }: HeaderProps): React.JSX.Element {
   const { store, categories, products } = useStore();
   const { getItemsCount } = useCart();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchValue ?? '');
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -56,7 +55,6 @@ export default function Header({ onSearch, selectedCategory, onCategoryChange, o
 
   const pickCategory = (id: string | null): void => {
     onCategoryChange(id);
-    setMenuOpen(false);
   };
 
   return (
@@ -176,23 +174,6 @@ export default function Header({ onSearch, selectedCategory, onCategoryChange, o
               {searchOpen ? <X className="size-5" strokeWidth={1.75} aria-hidden /> : <Search className="size-5" strokeWidth={1.75} aria-hidden />}
             </button>
 
-            <button
-              type="button"
-              aria-label={menuOpen ? 'إغلاق التصنيفات' : 'فتح التصنيفات'}
-              aria-expanded={menuOpen}
-              className={cn(
-                'inline-flex size-12 items-center justify-center rounded-md border transition-colors md:hidden',
-                menuOpen ? 'border-transparent' : '',
-              )}
-              style={{
-                borderColor: isDarkHeader ? 'rgba(255,255,255,0.25)' : 'var(--store-border)',
-                backgroundColor: menuOpen ? 'var(--store-primary)' : 'transparent',
-                color: menuOpen ? 'var(--store-button-text)' : 'var(--store-header-text)',
-              }}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              {menuOpen ? <X className="size-5" strokeWidth={1.75} aria-hidden /> : <Menu className="size-5" strokeWidth={1.75} aria-hidden />}
-            </button>
           </div>
         </div>
 
@@ -232,10 +213,7 @@ export default function Header({ onSearch, selectedCategory, onCategoryChange, o
         ) : null}
 
         <nav
-          className={cn(
-            'gap-0 overflow-x-auto border-t scrollbar-hide md:flex md:flex-row',
-            menuOpen ? 'flex flex-col' : 'hidden md:flex',
-          )}
+          className="flex gap-0 overflow-x-auto border-t scrollbar-hide"
           style={{ borderColor: 'var(--store-border)' }}
           aria-label="تصنيفات المتجر"
         >
