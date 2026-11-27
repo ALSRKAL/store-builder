@@ -53,9 +53,11 @@ test('responsive real App utility CSS and desktop/mobile navigation geometry', a
     }
     await page.keyboard.press('Escape');
   }
-  const grid = page.locator('main .grid').filter({ has: page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }) }).last();
-  await expect.poll(() => grid.evaluate(el => getComputedStyle(el).display)).toBe('grid');
-  const card = page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ });
+  const rail = page.getByRole('region', { name: 'قسم منتجات تجريبية' });
+  await expect(rail).toBeVisible();
+  await expect.poll(() => rail.evaluate(el => getComputedStyle(el).display)).toBe('flex');
+  await expect.poll(() => rail.evaluate(el => getComputedStyle(el).overflowX)).toBe('auto');
+  const card = rail.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ });
   expect((await card.boundingBox())!.width).toBeGreaterThan(140);
   await noOverflow(page);
 });
@@ -66,6 +68,9 @@ test('admin theme and settings persist to separate unauthenticated storefront co
   await customer.page.goto('/store/local-gui-shop');
   await expect(customer.page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ })).toBeVisible();
   await tab(page, 'المظهر');
+  await expect(page.getByLabel(/الأساسي — قيمة اللون HEX/)).not.toHaveValue('#000000');
+  await expect(page.getByLabel(/خلفية الصفحة — قيمة اللون HEX/)).not.toHaveValue('#000000');
+  await expect(page.getByRole('heading', { name: 'خيارات المظهر' })).toBeVisible();
   await page.getByRole('button', { name: 'إعادة تعيين', exact: true }).click();
   await page.getByRole('button', { name: 'حفظ التغييرات', exact: true }).click();
   await expect.poll(async () => {

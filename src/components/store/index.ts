@@ -8,6 +8,7 @@ export { default as Header } from './Header';
 export { default as PaymentMethods } from './PaymentMethods';
 export { default as ProductCard } from './ProductCard';
 export { default as ProductModal } from './ProductModal';
+export { default as ProductRail } from './ProductRail';
 export { default as ProductSlider } from './ProductSlider';
 export { default as SmartCart } from './SmartCart';
 export { default as SocialLinks } from './SocialLinks';

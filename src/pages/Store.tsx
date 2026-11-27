@@ -19,6 +19,7 @@ import { useCart } from '../contexts/CartContext';
 import Header from '../components/store/Header';
 import ProductSlider from '../components/store/ProductSlider';
 import ProductCard from '../components/store/ProductCard';
+import ProductRail from '../components/store/ProductRail';
 import ProductModal from '../components/store/ProductModal';
 import StoreLocation, { type LocationData } from '../components/store/StoreLocation';
 import AnnouncementBar from '../components/store/AnnouncementBar';
@@ -107,6 +108,7 @@ function Store(): React.JSX.Element {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [offersOnly, setOffersOnly] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [storyStartIndex, setStoryStartIndex] = useState(0);
   // يبقى true بعد نجاح الطلب حتى يغلق العميل شاشة التأكيد، رغم تفريغ السلة.
@@ -243,9 +245,10 @@ function Store(): React.JSX.Element {
           product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           product.description?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesCategory = !selectedCategory || product.categoryId === selectedCategory;
-        return matchesSearch && matchesCategory;
+        const matchesOffer = !offersOnly || (product.discount ?? 0) > 0 || (product.originalPrice ?? 0) > product.price;
+        return matchesSearch && matchesCategory && matchesOffer;
       }),
-    [products, searchQuery, selectedCategory],
+    [products, searchQuery, selectedCategory, offersOnly],
   );
 
   const newProducts = useMemo(
@@ -261,7 +264,7 @@ function Store(): React.JSX.Element {
 
   // المنتجات مقسّمة إلى أقسام حسب التصنيف (مثل واجهات المتاجر الكبيرة)
   // بدل رمي كل المنتجات في قائمة واحدة طويلة. البحث أو اختيار تصنيف يعرض شبكة واحدة.
-  const isFilteredView = Boolean(searchQuery || selectedCategory);
+  const isFilteredView = Boolean(searchQuery || selectedCategory || offersOnly);
   const categorySections = useMemo(() => {
     if (isFilteredView) return [];
     return categories
@@ -272,6 +275,10 @@ function Store(): React.JSX.Element {
   const uncategorizedProducts = useMemo(
     () => (categorySections.length ? products.filter((product) => !product.categoryId || !knownCategoryIds.has(product.categoryId)) : []),
     [categorySections.length, products, knownCategoryIds],
+  );
+  const discountedProducts = useMemo(
+    () => products.filter((product) => (product.discount ?? 0) > 0 || (product.originalPrice ?? 0) > product.price),
+    [products],
   );
 
   // meta tags
@@ -385,7 +392,7 @@ function Store(): React.JSX.Element {
     );
   }
 
-  const showSlider = !isStoryModeEnabled && !searchQuery && !selectedCategory && newProducts.length > 0;
+  const showSlider = !isStoryModeEnabled && !searchQuery && !selectedCategory && !offersOnly && newProducts.length > 0;
 
   return (
     <ErrorBoundary section="المتجر">
@@ -395,7 +402,7 @@ function Store(): React.JSX.Element {
           onSearch={setSearchQuery}
           searchValue={searchQuery}
           selectedCategory={selectedCategory}
-          onCategoryChange={setSelectedCategory}
+          onCategoryChange={(categoryId) => { setOffersOnly(false); setSelectedCategory(categoryId); }}
           onCartOpen={openCartRoute}
         />
         <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 max-md:px-3">
@@ -404,7 +411,7 @@ function Store(): React.JSX.Element {
           {isFilteredView ? (
             <div className="mb-4 flex items-end justify-between gap-3">
               <h2 className="flex items-center gap-2 text-h3 font-semibold text-[var(--store-body-text)]">
-                {selectedCategory ? 'منتجات التصنيف' : 'جميع المنتجات'}
+                {offersOnly ? 'العروض' : selectedCategory ? 'منتجات التصنيف' : 'جميع المنتجات'}
                 <span className="text-[13px] font-normal tabular-nums text-[var(--store-body-text)]/60" data-numeric>
                   {filteredProducts.length}
                 </span>
@@ -446,6 +453,7 @@ function Store(): React.JSX.Element {
                     onClick={() => {
                       setSearchQuery('');
                       setSelectedCategory(null);
+                      setOffersOnly(false);
                     }}
                     className="mt-4"
                   >
@@ -460,36 +468,27 @@ function Store(): React.JSX.Element {
             <StoreProductGrid products={filteredProducts} onProduct={openProduct} />
           ) : (
             <>
+              {!isStoryModeEnabled && discountedProducts.length > 0 ? (
+                <ProductRail
+                  title="عروض"
+                  products={discountedProducts.slice(0, 8)}
+                  count={discountedProducts.length}
+                  onProduct={openProduct}
+                  onViewAll={() => setOffersOnly(true)}
+                />
+              ) : null}
               {categorySections.map(({ category, items }) => (
-                <section key={category.id} className="mb-8" aria-labelledby={`category-${category.id}`}>
-                  <div className="mb-3 flex items-end justify-between gap-3 border-b border-[var(--store-border)] pb-2.5">
-                    <h2 id={`category-${category.id}`} className="flex items-center gap-2 text-h3 font-semibold text-[var(--store-body-text)]">
-                      {category.name}
-                      <span className="text-[13px] font-normal tabular-nums text-[var(--store-body-text)]/60" data-numeric>{items.length}</span>
-                    </h2>
-                    {items.length > 4 ? (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCategory(category.id)}
-                        className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 text-[13px] font-medium text-[var(--store-body-text)]/70 hover:bg-[var(--store-card-bg)]"
-                      >
-                        عرض الكل
-                      </button>
-                    ) : null}
-                  </div>
-                  <StoreProductGrid products={items.slice(0, 6)} onProduct={openProduct} hideMobileOverflow />
-                </section>
+                <ProductRail
+                  key={category.id}
+                  title={category.name}
+                  products={items.slice(0, 8)}
+                  count={items.length}
+                  onProduct={openProduct}
+                  onViewAll={() => setSelectedCategory(category.id)}
+                />
               ))}
               {uncategorizedProducts.length > 0 ? (
-                <section className="mb-8" aria-labelledby="uncategorized-products">
-                  <div className="mb-3 border-b border-[var(--store-border)] pb-2.5">
-                    <h2 id="uncategorized-products" className="flex items-center gap-2 text-h3 font-semibold text-[var(--store-body-text)]">
-                      منتجات أخرى
-                      <span className="text-[13px] font-normal tabular-nums text-[var(--store-body-text)]/60" data-numeric>{uncategorizedProducts.length}</span>
-                    </h2>
-                  </div>
-                  <StoreProductGrid products={uncategorizedProducts} onProduct={openProduct} />
-                </section>
+                <ProductRail title="منتجات أخرى" products={uncategorizedProducts} onProduct={openProduct} />
               ) : null}
             </>
           )}

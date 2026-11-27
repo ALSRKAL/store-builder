@@ -14,6 +14,7 @@ import CartContext from '../contexts/CartContext';
 import Header from '../components/store/Header';
 import ProductSlider from '../components/store/ProductSlider';
 import ProductCard from '../components/store/ProductCard';
+import ProductRail from '../components/store/ProductRail';
 import StoryCircles from '../components/store/StoryCircles';
 import { demoCategories, demoProducts, demoStore } from '../data/demoData';
 import { formatPrice } from '../data/currencies';
@@ -155,6 +156,10 @@ export default function ThemePreviewFrame(): React.JSX.Element {
 
   const showSlider = displayMode !== 'story' && !search && !category && featuredProducts.length > 0;
   const isFilteredView = Boolean(search || category);
+  const discountedProducts = useMemo(
+    () => demoProducts.filter((product) => (product.discount ?? 0) > 0 || (product.originalPrice ?? 0) > product.price),
+    [],
+  );
   const categorySections = useMemo(
     () => demoCategories
       .map((item) => ({ category: item, items: demoProducts.filter((product) => product.categoryId === item.id) }))
@@ -233,20 +238,11 @@ export default function ThemePreviewFrame(): React.JSX.Element {
               </div>
             ) : (
               <>
+                {discountedProducts.length > 0 ? (
+                  <ProductRail title="عروض" products={discountedProducts.slice(0, 8)} count={discountedProducts.length} onProduct={noop} />
+                ) : null}
                 {categorySections.map(({ category: section, items }) => (
-                  <section key={section.id} className="mb-8">
-                    <div className="mb-3 flex items-end justify-between gap-3 border-b border-[var(--store-border)] pb-2.5">
-                      <h2 className="flex items-center gap-2 text-h3 font-semibold text-[var(--store-body-text)]">
-                        {section.name}
-                        <span className="text-[13px] font-normal tabular-nums text-[var(--store-body-text)]/60" data-numeric>{items.length}</span>
-                      </h2>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:gap-5">
-                      {items.slice(0, 6).map((product) => (
-                        <ProductCard key={product.id} product={product} onClick={noop} />
-                      ))}
-                    </div>
-                  </section>
+                  <ProductRail key={section.id} title={section.name} products={items.slice(0, 8)} count={items.length} onProduct={noop} />
                 ))}
               </>
             )}
