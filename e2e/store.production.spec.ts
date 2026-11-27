@@ -19,13 +19,14 @@ test('actual root production build loads public store lazy modules and compiled 
   await page.getByRole('button', { name: /موقعنا/ }).click();
   expect(loaded.some(url => /Store-[^/]+\.js/.test(url))).toBeTruthy();
   expect(loaded.some(url => /Dashboard-[^/]+\.js/.test(url))).toBeFalsy();
-  const grid = page.locator('main .grid').filter({ has: page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }) }).last();
-  await expect.poll(() => grid.evaluate(el => getComputedStyle(el).display)).toBe('grid');
-  const box = await page.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }).boundingBox();
+  const rail = page.getByRole('region', { name: 'قسم منتجات تجريبية' });
+  await expect(rail).toBeVisible();
+  await expect.poll(() => rail.evaluate(el => getComputedStyle(el).display)).toBe('flex');
+  const box = await rail.getByRole('button', { name: /عرض تفاصيل منتج تجريبي أول/ }).boundingBox();
   expect(box!.width).toBeGreaterThan(140);
   expect(box!.width).toBeLessThan(info.project.name.endsWith('desktop') ? 500 : 300);
   await noOverflow(page);
-  await page.getByRole('button', { name: 'أضف منتج تجريبي أول إلى السلة' }).click();
+  await page.getByRole('button', { name: 'أضف منتج تجريبي أول إلى السلة' }).filter({ visible: true }).first().click();
   await page.getByRole('button', { name: /السلة، 1 عنصر/ }).click();
   await page.getByRole('button', { name: 'إتمام الطلب', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'اختيار طريقة الدفع' })).toBeVisible();
