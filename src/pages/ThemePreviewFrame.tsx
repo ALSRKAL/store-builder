@@ -163,7 +163,9 @@ export default function ThemePreviewFrame(): React.JSX.Element {
   const categorySections = useMemo(
     () => demoCategories
       .map((item) => ({ category: item, items: demoProducts.filter((product) => product.categoryId === item.id) }))
-      .filter((section) => section.items.length > 0),
+      .filter((section) => section.items.length > 0)
+      .sort((a, b) => b.items.length - a.items.length)
+      .slice(0, 4),
     [],
   );
 

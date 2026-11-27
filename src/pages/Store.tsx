@@ -271,6 +271,12 @@ function Store(): React.JSX.Element {
       .map((category) => ({ category, items: products.filter((product) => product.categoryId === category.id) }))
       .filter((section) => section.items.length > 0);
   }, [categories, products, isFilteredView]);
+  // Keep the home page short even when a merchant has many categories: feature
+  // the four richest categories, while the category rail above still exposes all.
+  const featuredCategorySections = useMemo(
+    () => [...categorySections].sort((a, b) => b.items.length - a.items.length).slice(0, 4),
+    [categorySections],
+  );
   const knownCategoryIds = useMemo(() => new Set(categories.map((category) => category.id)), [categories]);
   const uncategorizedProducts = useMemo(
     () => (categorySections.length ? products.filter((product) => !product.categoryId || !knownCategoryIds.has(product.categoryId)) : []),
@@ -477,7 +483,7 @@ function Store(): React.JSX.Element {
                   onViewAll={() => setOffersOnly(true)}
                 />
               ) : null}
-              {categorySections.map(({ category, items }) => (
+              {featuredCategorySections.map(({ category, items }) => (
                 <ProductRail
                   key={category.id}
                   title={category.name}
